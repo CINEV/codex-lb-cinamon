@@ -5,7 +5,7 @@ import logging
 import time
 from collections.abc import Collection
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Iterable
 
 from app.core import usage as usage_core
@@ -61,6 +61,7 @@ class RuntimeState:
     last_selected_at: float | None = None
     error_count: int = 0
     version: int = 0
+    blocked_at: float | None = None
 
 
 @dataclass
@@ -709,6 +710,7 @@ class LoadBalancer:
             state = self._state_for(account)
             handle_rate_limit(state, error)
             self._sync_runtime_state(account, state)
+            self._runtime[account.id].blocked_at = time.time()
             async with self._repo_factory() as repos:
                 await self._persist_state(repos.accounts, account, state)
             self._selection_inputs_cache.invalidate()
@@ -719,6 +721,7 @@ class LoadBalancer:
             state = self._state_for(account)
             handle_quota_exceeded(state, error)
             self._sync_runtime_state(account, state)
+            self._runtime[account.id].blocked_at = time.time()
             async with self._repo_factory() as repos:
                 await self._persist_state(repos.accounts, account, state)
             self._selection_inputs_cache.invalidate()
@@ -938,6 +941,26 @@ def _state_from_account(
     # and to survive process restarts.
     db_reset_at = float(account.reset_at) if account.reset_at else None
     effective_runtime_reset = db_reset_at or runtime.reset_at
+
+    # Clear the runtime reset guard only when ALL conditions hold:
+    #   1. The quota/rate-limit cooldown has expired (debounce period over).
+    #   2. The block event was tracked in this process (blocked_at set).
+    #   3. The governing usage row was refreshed AFTER the block event.
+    # The freshness check must use the row that governs each status:
+    #   QUOTA_EXCEEDED → secondary window, RATE_LIMITED → primary window.
+    # On restart both blocked_at and cooldown_until are None, so the
+    # guard stays — accounts remain blocked until persisted reset_at expires.
+    if runtime.cooldown_until is not None and runtime.cooldown_until <= time.time() and runtime.blocked_at is not None:
+        if account.status == AccountStatus.QUOTA_EXCEEDED:
+            freshness_entry = effective_secondary_entry
+        elif account.status == AccountStatus.RATE_LIMITED:
+            freshness_entry = primary_entry
+        else:
+            freshness_entry = None
+        if freshness_entry and freshness_entry.recorded_at is not None:
+            recorded_epoch = freshness_entry.recorded_at.replace(tzinfo=timezone.utc).timestamp()
+            if recorded_epoch > runtime.blocked_at:
+                effective_runtime_reset = None
 
     status, used_percent, reset_at = apply_usage_quota(
         status=account.status,

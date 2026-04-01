@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from datetime import datetime
 
 import pytest
 
@@ -12,7 +13,8 @@ from app.core.balancer import (
     select_account,
 )
 from app.core.usage.quota import apply_usage_quota
-from app.db.models import AccountStatus
+from app.db.models import Account, AccountStatus, UsageHistory
+from app.modules.proxy.load_balancer import RuntimeState, _state_from_account
 
 pytestmark = pytest.mark.unit
 
@@ -255,11 +257,12 @@ def test_apply_usage_quota_sets_fallback_reset_for_primary_window(monkeypatch):
     assert reset_at == pytest.approx(now + 60.0)
 
 
-def test_handle_quota_exceeded_sets_used_percent():
+def test_handle_quota_exceeded_sets_used_percent_and_cooldown():
     state = AccountState("a", AccountStatus.ACTIVE, used_percent=5.0)
     handle_quota_exceeded(state, {})
     assert state.status == AccountStatus.QUOTA_EXCEEDED
     assert state.used_percent == 100.0
+    assert state.cooldown_until is not None
 
 
 def test_handle_permanent_failure_sets_reason():
@@ -326,6 +329,297 @@ def test_apply_usage_quota_resets_to_active_if_runtime_reset_expired(monkeypatch
     assert status == AccountStatus.ACTIVE
     assert used_percent == 50.0
     assert reset_at is None
+
+
+def test_apply_usage_quota_clears_quota_exceeded_when_runtime_reset_is_none(monkeypatch):
+    now = 1_700_000_000.0
+    monkeypatch.setattr("app.core.usage.quota.time.time", lambda: now)
+
+    status, used_percent, reset_at = apply_usage_quota(
+        status=AccountStatus.QUOTA_EXCEEDED,
+        primary_used=30.0,
+        primary_reset=None,
+        primary_window_minutes=None,
+        runtime_reset=None,
+        secondary_used=5.0,
+        secondary_reset=int(now + 3600),
+    )
+    assert status == AccountStatus.ACTIVE
+    assert used_percent == 30.0
+    assert reset_at is None
+
+
+def test_apply_usage_quota_clears_rate_limited_when_runtime_reset_is_none(monkeypatch):
+    now = 1_700_000_000.0
+    monkeypatch.setattr("app.core.usage.quota.time.time", lambda: now)
+
+    status, used_percent, reset_at = apply_usage_quota(
+        status=AccountStatus.RATE_LIMITED,
+        primary_used=10.0,
+        primary_reset=int(now + 3600),
+        primary_window_minutes=60,
+        runtime_reset=None,
+        secondary_used=None,
+        secondary_reset=None,
+    )
+    assert status == AccountStatus.ACTIVE
+    assert used_percent == 10.0
+    assert reset_at is None
+
+
+def test_quota_exceeded_cooldown_blocks_selection_despite_low_usage():
+    now = 1_700_000_000.0
+    state = AccountState(
+        "a",
+        AccountStatus.ACTIVE,
+        used_percent=5.0,
+        cooldown_until=now + 120.0,
+    )
+    result = select_account([state], now=now)
+    assert result.account is None
+
+
+def test_quota_exceeded_cooldown_allows_selection_after_expiry():
+    now = 1_700_000_000.0
+    state = AccountState(
+        "a",
+        AccountStatus.ACTIVE,
+        used_percent=5.0,
+        cooldown_until=now - 1.0,
+    )
+    result = select_account([state], now=now)
+    assert result.account is not None
+    assert result.account.account_id == "a"
+
+
+def _make_test_account(
+    account_id: str = "a",
+    status: AccountStatus = AccountStatus.ACTIVE,
+    reset_at: int | None = None,
+) -> Account:
+    return Account(
+        id=account_id,
+        chatgpt_account_id="chatgpt-" + account_id,
+        email=f"{account_id}@test.com",
+        plan_type="plus",
+        access_token_encrypted=b"a",
+        refresh_token_encrypted=b"r",
+        id_token_encrypted=b"i",
+        last_refresh=datetime(2025, 1, 1),
+        status=status,
+        reset_at=reset_at,
+    )
+
+
+def _make_test_usage(
+    account_id: str = "a",
+    window: str = "secondary",
+    used_percent: float = 10.0,
+    reset_at: int | None = None,
+    recorded_at: datetime | None = None,
+) -> UsageHistory:
+    return UsageHistory(
+        id=1,
+        account_id=account_id,
+        recorded_at=recorded_at or datetime(2025, 1, 1),
+        window=window,
+        used_percent=used_percent,
+        reset_at=reset_at,
+        window_minutes=10080,
+    )
+
+
+def _epoch_to_naive_utc(epoch: float) -> datetime:
+    from datetime import timezone
+
+    return datetime.fromtimestamp(epoch, timezone.utc).replace(tzinfo=None)
+
+
+def test_state_from_account_preserves_quota_exceeded_on_restart(monkeypatch):
+    now = 1_700_000_000.0
+    future_reset = int(now + 3600)
+    monkeypatch.setattr("app.modules.proxy.load_balancer.time.time", lambda: now)
+    monkeypatch.setattr("app.core.usage.quota.time.time", lambda: now)
+
+    account = _make_test_account(status=AccountStatus.QUOTA_EXCEEDED, reset_at=future_reset)
+    secondary = _make_test_usage(
+        used_percent=10.0,
+        reset_at=future_reset,
+        recorded_at=_epoch_to_naive_utc(now - 30),
+    )
+
+    state = _state_from_account(
+        account=account,
+        primary_entry=None,
+        secondary_entry=secondary,
+        runtime=RuntimeState(),
+    )
+    assert state.status == AccountStatus.QUOTA_EXCEEDED
+
+
+def test_state_from_account_clears_quota_exceeded_after_cooldown_expiry(monkeypatch):
+    now = 1_700_000_000.0
+    blocked = now - 130.0
+    future_reset = int(now + 3600)
+    monkeypatch.setattr("app.modules.proxy.load_balancer.time.time", lambda: now)
+    monkeypatch.setattr("app.core.usage.quota.time.time", lambda: now)
+
+    account = _make_test_account(status=AccountStatus.QUOTA_EXCEEDED, reset_at=future_reset)
+    secondary = _make_test_usage(
+        used_percent=10.0,
+        reset_at=future_reset,
+        recorded_at=_epoch_to_naive_utc(now - 30),
+    )
+
+    runtime = RuntimeState()
+    runtime.cooldown_until = now - 1.0
+    runtime.blocked_at = blocked
+
+    state = _state_from_account(
+        account=account,
+        primary_entry=None,
+        secondary_entry=secondary,
+        runtime=runtime,
+    )
+    assert state.status == AccountStatus.ACTIVE
+
+
+def test_state_from_account_keeps_quota_exceeded_during_active_cooldown(monkeypatch):
+    now = 1_700_000_000.0
+    blocked = now - 10.0
+    future_reset = int(now + 3600)
+    monkeypatch.setattr("app.modules.proxy.load_balancer.time.time", lambda: now)
+    monkeypatch.setattr("app.core.usage.quota.time.time", lambda: now)
+
+    account = _make_test_account(status=AccountStatus.QUOTA_EXCEEDED, reset_at=future_reset)
+    secondary = _make_test_usage(
+        used_percent=10.0,
+        reset_at=future_reset,
+        recorded_at=_epoch_to_naive_utc(now - 5),
+    )
+
+    runtime = RuntimeState()
+    runtime.cooldown_until = now + 60.0
+    runtime.blocked_at = blocked
+
+    state = _state_from_account(
+        account=account,
+        primary_entry=None,
+        secondary_entry=secondary,
+        runtime=runtime,
+    )
+    assert state.status == AccountStatus.QUOTA_EXCEEDED
+
+
+def test_state_from_account_keeps_quota_exceeded_when_usage_is_stale(monkeypatch):
+    now = 1_700_000_000.0
+    blocked = now - 60.0
+    future_reset = int(now + 3600)
+    monkeypatch.setattr("app.modules.proxy.load_balancer.time.time", lambda: now)
+    monkeypatch.setattr("app.core.usage.quota.time.time", lambda: now)
+
+    account = _make_test_account(status=AccountStatus.QUOTA_EXCEEDED, reset_at=future_reset)
+    secondary = _make_test_usage(
+        used_percent=10.0,
+        reset_at=future_reset,
+        recorded_at=_epoch_to_naive_utc(blocked - 30),
+    )
+
+    runtime = RuntimeState()
+    runtime.cooldown_until = now - 1.0
+    runtime.blocked_at = blocked
+
+    state = _state_from_account(
+        account=account,
+        primary_entry=None,
+        secondary_entry=secondary,
+        runtime=runtime,
+    )
+    assert state.status == AccountStatus.QUOTA_EXCEEDED
+
+
+def test_state_from_account_keeps_quota_exceeded_when_no_usage_data(monkeypatch):
+    now = 1_700_000_000.0
+    blocked = now - 130.0
+    future_reset = int(now + 3600)
+    monkeypatch.setattr("app.modules.proxy.load_balancer.time.time", lambda: now)
+    monkeypatch.setattr("app.core.usage.quota.time.time", lambda: now)
+
+    account = _make_test_account(status=AccountStatus.QUOTA_EXCEEDED, reset_at=future_reset)
+
+    runtime = RuntimeState()
+    runtime.cooldown_until = now - 1.0
+    runtime.blocked_at = blocked
+
+    state = _state_from_account(
+        account=account,
+        primary_entry=None,
+        secondary_entry=None,
+        runtime=runtime,
+    )
+    assert state.status == AccountStatus.QUOTA_EXCEEDED
+
+
+def test_state_from_account_rate_limited_checks_primary_freshness(monkeypatch):
+    now = 1_700_000_000.0
+    blocked = now - 130.0
+    future_reset = int(now + 3600)
+    monkeypatch.setattr("app.modules.proxy.load_balancer.time.time", lambda: now)
+    monkeypatch.setattr("app.core.usage.quota.time.time", lambda: now)
+
+    account = _make_test_account(status=AccountStatus.RATE_LIMITED, reset_at=future_reset)
+    stale_primary = _make_test_usage(
+        window="primary",
+        used_percent=10.0,
+        reset_at=future_reset,
+        recorded_at=_epoch_to_naive_utc(blocked - 30),
+    )
+    fresh_secondary = _make_test_usage(
+        window="secondary",
+        used_percent=10.0,
+        reset_at=future_reset,
+        recorded_at=_epoch_to_naive_utc(now - 10),
+    )
+
+    runtime = RuntimeState()
+    runtime.cooldown_until = now - 1.0
+    runtime.blocked_at = blocked
+
+    state = _state_from_account(
+        account=account,
+        primary_entry=stale_primary,
+        secondary_entry=fresh_secondary,
+        runtime=runtime,
+    )
+    assert state.status == AccountStatus.RATE_LIMITED
+
+
+def test_state_from_account_rate_limited_clears_with_fresh_primary(monkeypatch):
+    now = 1_700_000_000.0
+    blocked = now - 130.0
+    future_reset = int(now + 3600)
+    monkeypatch.setattr("app.modules.proxy.load_balancer.time.time", lambda: now)
+    monkeypatch.setattr("app.core.usage.quota.time.time", lambda: now)
+
+    account = _make_test_account(status=AccountStatus.RATE_LIMITED, reset_at=future_reset)
+    fresh_primary = _make_test_usage(
+        window="primary",
+        used_percent=10.0,
+        reset_at=future_reset,
+        recorded_at=_epoch_to_naive_utc(now - 10),
+    )
+
+    runtime = RuntimeState()
+    runtime.cooldown_until = now - 1.0
+    runtime.blocked_at = blocked
+
+    state = _state_from_account(
+        account=account,
+        primary_entry=fresh_primary,
+        secondary_entry=None,
+        runtime=runtime,
+    )
+    assert state.status == AccountStatus.ACTIVE
 
 
 def test_error_backoff_resets_error_count_when_expired():
