@@ -37,7 +37,7 @@ export function AccountActions({
           disabled={busy}
         >
           <Pencil className="h-3.5 w-3.5" />
-          Edit
+          수정
         </Button>
       ) : null}
 
@@ -50,7 +50,7 @@ export function AccountActions({
           disabled={busy}
         >
           <Play className="h-3.5 w-3.5" />
-          Resume
+          재개
         </Button>
       ) : (
         <Button
@@ -62,7 +62,7 @@ export function AccountActions({
           disabled={busy}
         >
           <Pause className="h-3.5 w-3.5" />
-          Pause
+          일시 중지
         </Button>
       )}
 
@@ -76,7 +76,7 @@ export function AccountActions({
           disabled={busy}
         >
           <RefreshCw className="h-3.5 w-3.5" />
-          Re-authenticate
+          재인증
         </Button>
       ) : null}
 
@@ -89,7 +89,7 @@ export function AccountActions({
         disabled={busy}
       >
         <Trash2 className="h-3.5 w-3.5" />
-        Delete
+        삭제
       </Button>
     </div>
   );

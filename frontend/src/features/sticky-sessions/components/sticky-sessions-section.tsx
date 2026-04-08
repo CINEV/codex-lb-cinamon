@@ -34,22 +34,22 @@ import { formatProviderLabel, formatTimeLong } from "@/utils/formatters";
 function kindLabel(kind: StickySessionKind): string {
   switch (kind) {
     case "codex_session":
-      return "Codex session";
+      return "Codex 세션";
     case "sticky_thread":
-      return "Sticky thread";
+      return "고정 스레드";
     case "prompt_cache":
-      return "Prompt cache";
+      return "프롬프트 캐시";
   }
 }
 
 function affinityScopeLabel(value: StickySessionEntry["affinityScope"]): string {
   switch (value) {
     case "chatgpt_continuity":
-      return "ChatGPT continuity";
+      return "ChatGPT 연속성";
     case "provider_prompt_cache":
-      return "Prompt-cache affinity";
+      return "프롬프트 캐시 affinity";
     case "provider_scoped":
-      return "Provider scoped";
+      return "공급자 범위";
   }
 }
 
@@ -127,9 +127,9 @@ export function StickySessionsSection() {
   const selectedDeleteCount = selectedDeleteTargets.length;
 
   const providerFilters: Array<{ label: string; value: StickySessionProviderKind | null }> = [
-    { label: "All providers", value: null },
-    { label: "ChatGPT Web", value: "chatgpt_web" },
-    { label: "OpenAI Platform", value: "openai_platform" },
+    { label: "전체 공급자", value: null },
+    { label: "ChatGPT 웹", value: "chatgpt_web" },
+    { label: "OpenAI 플랫폼", value: "openai_platform" },
   ];
 
   useEffect(() => {
@@ -165,9 +165,9 @@ export function StickySessionsSection() {
           <Pin className="h-4 w-4 text-primary" aria-hidden="true" />
         </div>
         <div>
-          <h3 className="text-sm font-semibold">Sticky sessions</h3>
+          <h3 className="text-sm font-semibold">고정 세션</h3>
           <p className="text-xs text-muted-foreground">
-            Inspect durable mappings and purge stale prompt-cache affinity rows.
+            유지되는 매핑을 확인하고 오래된 프롬프트 캐시 affinity 항목을 정리합니다.
           </p>
         </div>
       </div>
@@ -176,14 +176,14 @@ export function StickySessionsSection() {
 
       <div className="grid gap-2 sm:grid-cols-2">
         <Input
-          aria-label="Filter sticky sessions by account"
-          placeholder="Filter by account..."
+          aria-label="계정으로 고정 세션 필터링"
+          placeholder="계정으로 필터링..."
           value={params.accountQuery}
           onChange={(event) => setAccountQuery(event.target.value)}
         />
         <Input
-          aria-label="Filter sticky sessions by key"
-          placeholder="Filter by key..."
+          aria-label="키로 고정 세션 필터링"
+          placeholder="키로 필터링..."
           value={params.keyQuery}
           onChange={(event) => setKeyQuery(event.target.value)}
         />
@@ -210,16 +210,16 @@ export function StickySessionsSection() {
       <div className="flex flex-col gap-3 rounded-lg border px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1.5">
-            <span className="text-xs text-muted-foreground">Visible rows</span>
+            <span className="text-xs text-muted-foreground">표시 행 수</span>
             <span className="text-sm font-medium tabular-nums">{total}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="text-xs text-muted-foreground">Stale prompt-cache</span>
+            <span className="text-xs text-muted-foreground">오래된 프롬프트 캐시</span>
             <span className="text-sm font-medium tabular-nums">{staleCount}</span>
           </div>
           {selectedCount > 0 ? (
             <div className="flex items-center gap-1.5">
-              <span className="text-xs text-muted-foreground">Selected</span>
+              <span className="text-xs text-muted-foreground">선택됨</span>
               <span className="text-sm font-medium tabular-nums">{selectedCount}</span>
             </div>
           ) : null}
@@ -233,7 +233,7 @@ export function StickySessionsSection() {
             disabled={busy || !hasActiveFilter || total === 0}
             onClick={() => deleteFilteredDialog.show(total)}
           >
-            Delete Filtered
+            필터된 항목 삭제
           </Button>
           <Button
             type="button"
@@ -243,7 +243,7 @@ export function StickySessionsSection() {
             disabled={busy || selectedCount === 0}
             onClick={() => deleteSelectedDialog.show(selectedEntries)}
           >
-            Delete Sessions
+            세션 삭제
           </Button>
           <Button
             type="button"
@@ -253,7 +253,7 @@ export function StickySessionsSection() {
             disabled={busy || staleCount === 0}
             onClick={() => purgeDialog.show()}
           >
-            Purge stale
+            오래된 항목 정리
           </Button>
         </div>
       </div>
@@ -265,8 +265,8 @@ export function StickySessionsSection() {
       ) : !hasAnyRows ? (
         <EmptyState
           icon={Pin}
-          title="No sticky sessions"
-          description="Sticky mappings appear here after routed requests create them."
+          title="고정 세션이 없습니다"
+          description="라우팅된 요청이 매핑을 만들면 여기에 표시됩니다."
         />
       ) : (
         <>
@@ -277,7 +277,7 @@ export function StickySessionsSection() {
                   <TableRow>
                     <TableHead className="w-[5%] min-w-[3rem] pl-4 text-[11px] uppercase tracking-wider text-muted-foreground/80">
                       <Checkbox
-                        aria-label="Select all sticky sessions on current page"
+                        aria-label="현재 페이지의 고정 세션 전체 선택"
                         checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
                         disabled={busy || !hasEntries}
                         onCheckedChange={(checked) => setAllVisibleSelected(checked === true)}
@@ -293,7 +293,7 @@ export function StickySessionsSection() {
                       </button>
                     </TableHead>
                     <TableHead className="w-[14%] min-w-[8rem] text-[11px] uppercase tracking-wider text-muted-foreground/80">
-                      Kind
+                      종류
                     </TableHead>
                     <TableHead className="w-[18%] min-w-[9rem] text-[11px] uppercase tracking-wider text-muted-foreground/80">
                       <button
@@ -301,7 +301,7 @@ export function StickySessionsSection() {
                         className="cursor-pointer text-left transition-colors hover:text-foreground"
                         onClick={() => setSort("account", nextSortDirection(params.sortBy, params.sortDir, "account"))}
                       >
-                        {`Account${sortIndicator(params.sortBy, params.sortDir, "account") ?? ""}`}
+                        {`계정${sortIndicator(params.sortBy, params.sortDir, "account") ?? ""}`}
                       </button>
                     </TableHead>
                     <TableHead className="w-[16%] min-w-[9rem] text-[11px] uppercase tracking-wider text-muted-foreground/80">
@@ -312,14 +312,14 @@ export function StickySessionsSection() {
                           setSort("updated_at", nextSortDirection(params.sortBy, params.sortDir, "updated_at"))
                         }
                       >
-                        {`Updated${sortIndicator(params.sortBy, params.sortDir, "updated_at") ?? ""}`}
+                        {`업데이트${sortIndicator(params.sortBy, params.sortDir, "updated_at") ?? ""}`}
                       </button>
                     </TableHead>
                     <TableHead className="w-[16%] min-w-[9rem] text-[11px] uppercase tracking-wider text-muted-foreground/80">
-                      Expiry
+                      만료
                     </TableHead>
                     <TableHead className="w-[6%] min-w-[4.5rem] pr-4 text-right align-middle text-[11px] uppercase tracking-wider text-muted-foreground/80">
-                      Actions
+                      작업
                     </TableHead>
                   </TableRow>
                 </TableHeader>
@@ -335,7 +335,7 @@ export function StickySessionsSection() {
                       >
                         <TableCell className="pl-4">
                           <Checkbox
-                            aria-label={`Select sticky session ${entry.key}`}
+                            aria-label={`고정 세션 ${entry.key} 선택`}
                             checked={selected}
                             disabled={busy}
                             onCheckedChange={(checked) => setSelected(entry, checked === true)}
@@ -361,11 +361,11 @@ export function StickySessionsSection() {
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {entry.isStale ? (
-                            <Badge variant="secondary">Stale</Badge>
+                            <Badge variant="secondary">오래됨</Badge>
                           ) : expires ? (
                             `${expires.date} ${expires.time}`
                           ) : (
-                            "Durable"
+                            "지속됨"
                           )}
                         </TableCell>
                         <TableCell className="pr-4 text-right">
@@ -379,7 +379,7 @@ export function StickySessionsSection() {
                               deleteDialog.show({ key: entry.key, kind: entry.kind, providerKind: entry.providerKind })
                             }
                           >
-                            Remove
+                            제거
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -391,8 +391,8 @@ export function StickySessionsSection() {
           ) : (
             <EmptyState
               icon={Pin}
-              title="No sticky sessions on this page"
-              description="The current page is empty. Use pagination to navigate to another page."
+              title="이 페이지에는 고정 세션이 없습니다"
+              description="현재 페이지가 비어 있습니다. 페이지 이동으로 다른 페이지를 확인하세요."
             />
           )}
           <div className="flex justify-end pt-3">
@@ -410,13 +410,13 @@ export function StickySessionsSection() {
 
       <ConfirmDialog
         open={deleteDialog.open}
-        title="Remove sticky session"
+        title="고정 세션 제거"
         description={
           deleteDialog.data
-            ? `${kindLabel(deleteDialog.data.kind)} mapping ${deleteDialog.data.key} for ${formatProviderLabel(deleteDialog.data.providerKind)} will stop pinning future requests.`
+            ? `${formatProviderLabel(deleteDialog.data.providerKind)}의 ${kindLabel(deleteDialog.data.kind)} 매핑 ${deleteDialog.data.key} 는 앞으로 요청을 고정하지 않습니다.`
             : ""
         }
-        confirmLabel="Delete"
+        confirmLabel="삭제"
         onOpenChange={deleteDialog.onOpenChange}
         onConfirm={() => {
           if (!deleteDialog.data) {
@@ -430,13 +430,13 @@ export function StickySessionsSection() {
 
       <ConfirmDialog
         open={deleteSelectedDialog.open}
-        title="Delete selected sticky sessions"
+        title="선택한 고정 세션 삭제"
         description={
           selectedDeleteCount === 1
-            ? "Delete the selected sticky session? Failed deletions will be reported."
-            : `Delete ${selectedDeleteCount} selected sticky sessions? Failed deletions will be reported.`
+            ? "선택한 고정 세션을 삭제할까요? 실패한 삭제는 따로 안내됩니다."
+            : `선택한 고정 세션 ${selectedDeleteCount}개를 삭제할까요? 실패한 삭제는 따로 안내됩니다.`
         }
-        confirmLabel="Delete Sessions"
+        confirmLabel="세션 삭제"
         onOpenChange={deleteSelectedDialog.onOpenChange}
         onConfirm={() => {
           if (selectedDeleteTargets.length === 0) {
@@ -452,9 +452,9 @@ export function StickySessionsSection() {
 
       <ConfirmDialog
         open={deleteFilteredDialog.open}
-        title="Delete filtered sticky sessions"
-        description={`Delete all ${deleteFilteredDialog.data ?? 0} sticky sessions that match the current filters${params.providerKind ? ` for ${formatProviderLabel(params.providerKind)}` : ""}?`}
-        confirmLabel="Delete Filtered"
+        title="필터된 고정 세션 삭제"
+        description={`현재 필터와 일치하는 고정 세션 ${deleteFilteredDialog.data ?? 0}개를 모두 삭제할까요?${params.providerKind ? ` (${formatProviderLabel(params.providerKind)})` : ""}`}
+        confirmLabel="필터된 항목 삭제"
         onOpenChange={deleteFilteredDialog.onOpenChange}
         onConfirm={() => {
           void deleteFilteredMutation.mutateAsync().then(() => {
@@ -467,9 +467,9 @@ export function StickySessionsSection() {
 
       <ConfirmDialog
         open={purgeDialog.open}
-        title="Purge stale prompt-cache mappings"
-        description="Only expired prompt-cache entries will be deleted. Durable session and sticky-thread mappings stay intact."
-        confirmLabel="Purge"
+        title="오래된 프롬프트 캐시 매핑 정리"
+        description="만료된 프롬프트 캐시 항목만 삭제됩니다. 지속 세션과 고정 스레드 매핑은 유지됩니다."
+        confirmLabel="정리"
         onOpenChange={purgeDialog.onOpenChange}
         onConfirm={() => {
           void purgeMutation.mutateAsync(true).finally(() => {

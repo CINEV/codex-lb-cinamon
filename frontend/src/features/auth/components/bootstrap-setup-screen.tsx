@@ -20,9 +20,9 @@ export function BootstrapSetupScreen() {
             <CodexLogo size={28} className="text-primary" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">Complete Remote Setup</h1>
+            <h1 className="text-xl font-semibold tracking-tight">원격 설정 완료</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Remote dashboard access stays locked until an admin password is configured.
+              관리자 비밀번호가 설정되기 전까지 원격 대시보드 접근은 잠겨 있습니다.
             </p>
           </div>
         </div>
@@ -30,12 +30,12 @@ export function BootstrapSetupScreen() {
         <div className="rounded-2xl border bg-card p-6 shadow-[var(--shadow-md)]">
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Use the password setup flow below to bootstrap dashboard access before loading the rest of the admin UI.
+              아래 비밀번호 설정 절차를 완료해야 나머지 관리자 UI를 사용할 수 있습니다.
             </p>
             <AlertMessage variant="error">
               {bootstrapTokenConfigured
-                ? "Enter the dashboard bootstrap token when you set the initial password."
-                : "Remote setup is blocked until CODEX_LB_DASHBOARD_BOOTSTRAP_TOKEN is configured on the server."}
+                ? "초기 비밀번호를 설정할 때 대시보드 부트스트랩 토큰을 입력하세요."
+                : "서버에 CODEX_LB_DASHBOARD_BOOTSTRAP_TOKEN이 설정되기 전까지 원격 설정은 차단됩니다."}
             </AlertMessage>
           </div>
         </div>

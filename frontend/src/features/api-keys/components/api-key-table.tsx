@@ -23,18 +23,18 @@ import { formatCompactNumber, formatCurrency, formatTimeLong } from "@/utils/for
 
 function formatExpiry(value: string | null): string {
   if (!value) {
-    return "Never";
+    return "없음";
   }
   const parsed = formatTimeLong(value);
   return `${parsed.date} ${parsed.time}`;
 }
 
 const LIMIT_TYPE_SHORT: Record<LimitType, string> = {
-  total_tokens: "Tokens",
-  input_tokens: "Input",
-  output_tokens: "Output",
-  cost_usd: "Cost",
-  credits: "Credits",
+  total_tokens: "토큰",
+  input_tokens: "입력",
+  output_tokens: "출력",
+  cost_usd: "비용",
+  credits: "크레딧",
 };
 
 function formatLimitSummary(limits: LimitRule[]): string {
@@ -66,12 +66,12 @@ function formatUsageSummary(
   const cached = formatCompactNumber(cachedInputTokens);
   const requests = formatCompactNumber(requestCount);
   const cost = formatCurrency(totalCostUsd);
-  return `${total} tok | ${cached} cached | ${requests} req | ${cost}`;
+  return `${total} tok | ${cached} 캐시 | ${requests} 요청 | ${cost}`;
 }
 
 function getUsageValue(apiKey: ApiKey): string {
   if (!apiKey.usageSummary) {
-    return "No Usage";
+    return "사용량 없음";
   }
 
   return formatUsageSummary(
@@ -84,7 +84,7 @@ function getUsageValue(apiKey: ApiKey): string {
 
 function getLimitValue(apiKey: ApiKey): string {
   if (apiKey.limits.length === 0) {
-    return "No Limit";
+    return "제한 없음";
   }
 
   return formatLimitSummary(apiKey.limits);
@@ -100,7 +100,7 @@ export type ApiKeyTableProps = {
 
 export function ApiKeyTable({ keys, busy, onEdit, onDelete, onRegenerate }: ApiKeyTableProps) {
   if (keys.length === 0) {
-    return <EmptyState icon={KeyRound} title="No API keys created yet" />;
+    return <EmptyState icon={KeyRound} title="생성된 API 키가 없습니다" />;
   }
 
   return (
@@ -108,19 +108,19 @@ export function ApiKeyTable({ keys, busy, onEdit, onDelete, onRegenerate }: ApiK
     <Table className="table-fixed">
       <TableHeader>
         <TableRow>
-          <TableHead className="w-[20%] min-w-[12rem] pl-4 text-[11px] uppercase tracking-wider text-muted-foreground/80">Name</TableHead>
-          <TableHead className="w-[10%] min-w-[8rem] text-[11px] uppercase tracking-wider text-muted-foreground/80">Prefix</TableHead>
-          <TableHead className="w-[9%] min-w-[6.5rem] text-[11px] uppercase tracking-wider text-muted-foreground/80">Models</TableHead>
-          <TableHead className="w-[26%] min-w-[17rem] text-[11px] uppercase tracking-wider text-muted-foreground/80">Usage</TableHead>
-          <TableHead className="w-[14%] min-w-[12rem] text-[11px] uppercase tracking-wider text-muted-foreground/80">Limit</TableHead>
-          <TableHead className="w-[8%] min-w-[7rem] text-[11px] uppercase tracking-wider text-muted-foreground/80">Expiry</TableHead>
-          <TableHead className="w-[7%] min-w-[5.5rem] text-[11px] uppercase tracking-wider text-muted-foreground/80">Status</TableHead>
-          <TableHead className="w-[6%] min-w-[4.5rem] pr-4 text-right text-[11px] uppercase tracking-wider text-muted-foreground/80">Actions</TableHead>
+          <TableHead className="w-[20%] min-w-[12rem] pl-4 text-[11px] uppercase tracking-wider text-muted-foreground/80">이름</TableHead>
+          <TableHead className="w-[10%] min-w-[8rem] text-[11px] uppercase tracking-wider text-muted-foreground/80">접두사</TableHead>
+          <TableHead className="w-[9%] min-w-[6.5rem] text-[11px] uppercase tracking-wider text-muted-foreground/80">모델</TableHead>
+          <TableHead className="w-[26%] min-w-[17rem] text-[11px] uppercase tracking-wider text-muted-foreground/80">사용량</TableHead>
+          <TableHead className="w-[14%] min-w-[12rem] text-[11px] uppercase tracking-wider text-muted-foreground/80">제한</TableHead>
+          <TableHead className="w-[8%] min-w-[7rem] text-[11px] uppercase tracking-wider text-muted-foreground/80">만료</TableHead>
+          <TableHead className="w-[7%] min-w-[5.5rem] text-[11px] uppercase tracking-wider text-muted-foreground/80">상태</TableHead>
+          <TableHead className="w-[6%] min-w-[4.5rem] pr-4 text-right text-[11px] uppercase tracking-wider text-muted-foreground/80">작업</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {keys.map((apiKey) => {
-          const models = apiKey.allowedModels?.join(", ") || "All";
+          const models = apiKey.allowedModels?.join(", ") || "전체";
 
           return (
             <TableRow key={apiKey.id}>
@@ -132,7 +132,7 @@ export function ApiKeyTable({ keys, busy, onEdit, onDelete, onRegenerate }: ApiK
               <TableCell className="truncate text-xs text-muted-foreground">{formatExpiry(apiKey.expiresAt)}</TableCell>
               <TableCell>
                 <Badge className={apiKey.isActive ? "bg-emerald-500 text-white" : "bg-zinc-500 text-white"}>
-                  {apiKey.isActive ? "Active" : "Disabled"}
+                  {apiKey.isActive ? "활성" : "비활성"}
                 </Badge>
               </TableCell>
               <TableCell className="pr-4 text-right">
@@ -140,22 +140,22 @@ export function ApiKeyTable({ keys, busy, onEdit, onDelete, onRegenerate }: ApiK
                   <DropdownMenuTrigger asChild>
                     <Button type="button" size="icon-sm" variant="ghost" disabled={busy}>
                       <Ellipsis className="size-4" />
-                      <span className="sr-only">Actions</span>
+                      <span className="sr-only">작업</span>
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={() => onEdit(apiKey)}>
                       <Pencil className="size-4" />
-                      Edit
+                      수정
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => onRegenerate(apiKey)}>
                       <RefreshCw className="size-4" />
-                      Regenerate
+                      재생성
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem variant="destructive" onClick={() => onDelete(apiKey)}>
                       <Trash2 className="size-4" />
-                      Delete
+                      삭제
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>

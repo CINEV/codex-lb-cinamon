@@ -9,18 +9,18 @@ import { formatTimeLong } from "@/utils/formatters";
 
 function getRoutingLabel(strategy: "usage_weighted" | "round_robin" | "capacity_weighted", sticky: boolean, preferEarlier: boolean): string {
   if (strategy === "round_robin") {
-    return sticky ? "Round robin + Sticky threads" : "Round robin";
+    return sticky ? "라운드 로빈 + 고정 스레드" : "라운드 로빈";
   }
   if (strategy === "capacity_weighted") {
-    if (sticky && preferEarlier) return "Capacity weighted + Sticky + Early reset";
-    if (sticky) return "Capacity weighted + Sticky threads";
-    if (preferEarlier) return "Capacity weighted + Early reset";
-    return "Capacity weighted";
+    if (sticky && preferEarlier) return "용량 가중치 + 고정 + 빠른 리셋 우선";
+    if (sticky) return "용량 가중치 + 고정 스레드";
+    if (preferEarlier) return "용량 가중치 + 빠른 리셋 우선";
+    return "용량 가중치";
   }
-  if (sticky && preferEarlier) return "Sticky + Early reset";
-  if (sticky) return "Sticky threads";
-  if (preferEarlier) return "Early reset preferred";
-  return "Usage weighted";
+  if (sticky && preferEarlier) return "고정 + 빠른 리셋 우선";
+  if (sticky) return "고정 스레드";
+  if (preferEarlier) return "빠른 리셋 우선";
+  return "사용량 가중치";
 }
 
 export function StatusBar() {
@@ -56,19 +56,19 @@ export function StatusBar() {
       <div className="mx-auto flex w-full max-w-[1500px] flex-wrap items-center gap-x-5 gap-y-1 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-1.5">
           {isLive ? (
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" title="Live" />
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" title="실시간" />
           ) : (
             <Activity className="h-3 w-3" aria-hidden="true" />
           )}
-          <span className="font-medium">Last sync:</span> {lastSync.time}
+          <span className="font-medium">마지막 동기화:</span> {lastSync.time}
         </span>
         <span className="inline-flex items-center gap-1.5">
           <ArrowRightLeft className="h-3 w-3" aria-hidden="true" />
-          <span className="font-medium">Routing:</span> {routingLabel}
+          <span className="font-medium">라우팅:</span> {routingLabel}
         </span>
         <span className="inline-flex items-center gap-1.5">
           <Tag className="h-3 w-3" aria-hidden="true" />
-          <span className="font-medium">Version:</span> {__APP_VERSION__}
+          <span className="font-medium">버전:</span> {__APP_VERSION__}
         </span>
       </div>
     </footer>

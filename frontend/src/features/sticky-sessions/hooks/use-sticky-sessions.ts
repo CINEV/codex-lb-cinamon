@@ -84,18 +84,18 @@ export function useStickySessions() {
     mutationFn: (targets: StickySessionIdentifier[]) => deleteStickySessions({ sessions: targets }),
     onSuccess: async (response: StickySessionsDeleteResponse) => {
       if (response.deletedCount > 0 && response.failed.length === 0) {
-        toast.success(response.deletedCount === 1 ? "Sticky session deleted" : `Deleted ${response.deletedCount} sessions`);
+        toast.success(response.deletedCount === 1 ? "고정 세션을 삭제했습니다" : `${response.deletedCount}개의 세션을 삭제했습니다`);
       } else if (response.deletedCount > 0) {
         toast.warning(
-          `Deleted ${response.deletedCount} sessions. ${response.failed.length} could not be deleted.`,
+          `${response.deletedCount}개의 세션을 삭제했습니다. ${response.failed.length}개는 삭제하지 못했습니다.`,
         );
       } else {
-        toast.error("No selected sessions could be deleted");
+        toast.error("선택한 세션을 삭제할 수 없습니다");
       }
       await invalidate();
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Failed to delete sticky sessions");
+      toast.error(error.message || "고정 세션을 삭제하지 못했습니다");
     },
   });
 
@@ -110,26 +110,26 @@ export function useStickySessions() {
     onSuccess: async (response: StickySessionsDeleteFilteredResponse) => {
       if (response.deletedCount > 0) {
         toast.success(
-          response.deletedCount === 1 ? "Filtered sticky session deleted" : `Deleted ${response.deletedCount} filtered sessions`,
+          response.deletedCount === 1 ? "필터된 고정 세션을 삭제했습니다" : `필터된 세션 ${response.deletedCount}개를 삭제했습니다`,
         );
       } else {
-        toast.error("No filtered sessions could be deleted");
+        toast.error("필터된 세션을 삭제할 수 없습니다");
       }
       await invalidate();
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Failed to delete filtered sticky sessions");
+      toast.error(error.message || "필터된 고정 세션을 삭제하지 못했습니다");
     },
   });
 
   const purgeMutation = useMutation({
     mutationFn: (staleOnly: boolean) => purgeStickySessions({ staleOnly }),
     onSuccess: (response) => {
-      toast.success(`Purged ${response.deletedCount} sticky sessions`);
+      toast.success(`고정 세션 ${response.deletedCount}개를 정리했습니다`);
       invalidate();
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Failed to purge sticky sessions");
+      toast.error(error.message || "고정 세션 정리에 실패했습니다");
     },
   });
 

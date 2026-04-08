@@ -86,7 +86,7 @@ export function MultiSelectFilter({ label, values, options, onChange }: MultiSel
         <DropdownMenuLabel>{label}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {renderedOptions.length === 0 ? (
-          <p className="px-2 py-1 text-xs text-muted-foreground">No options</p>
+          <p className="px-2 py-1 text-xs text-muted-foreground">옵션이 없습니다</p>
         ) : (
           renderedOptions.map((option) => (
             <DropdownMenuCheckboxItem
@@ -99,7 +99,7 @@ export function MultiSelectFilter({ label, values, options, onChange }: MultiSel
                 <span className={blurred && option.isEmail ? "truncate privacy-blur" : "truncate"}>{option.label}</span>
                 {option.isStale ? (
                   <Badge variant="secondary" className="text-[10px]">
-                    Stale
+                    오래됨
                   </Badge>
                 ) : null}
               </span>
@@ -112,7 +112,7 @@ export function MultiSelectFilter({ label, values, options, onChange }: MultiSel
                     event.stopPropagation();
                     removeValue(option.value);
                   }}
-                  aria-label={`Remove stale ${option.label}`}
+                  aria-label={`오래된 ${option.label} 제거`}
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>

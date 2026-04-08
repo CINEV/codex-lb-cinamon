@@ -16,7 +16,7 @@ export type AccountListItemProps = {
 
 function formatAccountListSubtitle(account: AccountSummary): string {
   if (account.providerKind === "openai_platform") {
-    return `${formatProviderLabel(account.providerKind)} API key`;
+    return `${formatProviderLabel(account.providerKind)} API 키`;
   }
   return formatSlug(account.planType);
 }
@@ -47,7 +47,7 @@ export function AccountListItem({ account, selected, showAccountId = false, onSe
     : null;
   const baseSubtitle = formatAccountListSubtitle(account);
   const providerMetadata = account.providerKind === "openai_platform" && account.routingSubjectId
-    ? `${baseSubtitle} | Subject ${account.routingSubjectId}`
+    ? `${baseSubtitle} | 라우팅 대상 ${account.routingSubjectId}`
     : baseSubtitle;
   const shouldAppendProviderMetadata = account.providerKind === "openai_platform";
   const idSuffix = showAccountId ? ` | ID ${formatCompactAccountId(account.accountId)}` : "";
@@ -71,7 +71,7 @@ export function AccountListItem({ account, selected, showAccountId = false, onSe
           <p className="truncate text-sm font-medium">
             {titleIsEmail && blurred ? <span className="privacy-blur">{title}</span> : title}
           </p>
-          <p className="truncate text-xs text-muted-foreground" title={showAccountId ? `Account ID ${account.accountId}` : undefined}>
+          <p className="truncate text-xs text-muted-foreground" title={showAccountId ? `계정 ID ${account.accountId}` : undefined}>
             {emailSubtitle ? (
               <>
                 <span className={blurred ? "privacy-blur" : undefined}>{emailSubtitle}</span>

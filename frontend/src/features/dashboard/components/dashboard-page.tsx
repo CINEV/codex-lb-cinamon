@@ -132,9 +132,9 @@ export function DashboardPage() {
       {/* Page header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">대시보드</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Overview, account health, and recent request logs.
+            개요, 계정 상태, 최근 요청 로그를 확인합니다.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -147,7 +147,7 @@ export function DashboardPage() {
             onClick={handleRefresh}
             disabled={isRefreshing}
             className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
-            title="Refresh dashboard"
+            title="대시보드 새로 고침"
           >
             <RefreshCw className={`h-4 w-4${isRefreshing ? " animate-spin" : ""}`} />
           </button>
@@ -175,7 +175,7 @@ export function DashboardPage() {
 
           <section className="space-y-4">
             <div className="flex items-center gap-3">
-              <h2 className="text-[13px] font-medium uppercase tracking-wider text-muted-foreground">Accounts</h2>
+              <h2 className="text-[13px] font-medium uppercase tracking-wider text-muted-foreground">계정</h2>
               <div className="h-px flex-1 bg-border" />
             </div>
             <AccountCards accounts={overview?.accounts ?? []} onAction={handleAccountAction} />
@@ -183,7 +183,7 @@ export function DashboardPage() {
 
           <section className="space-y-4">
             <div className="flex items-center gap-3">
-              <h2 className="text-[13px] font-medium uppercase tracking-wider text-muted-foreground">Request Logs</h2>
+              <h2 className="text-[13px] font-medium uppercase tracking-wider text-muted-foreground">요청 로그</h2>
               <div className="h-px flex-1 bg-border" />
             </div>
             <RequestFilters

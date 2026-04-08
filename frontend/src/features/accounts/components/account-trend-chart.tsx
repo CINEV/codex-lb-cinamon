@@ -45,8 +45,8 @@ function formatXTick(isoStr: string): string {
 }
 
 const SERIES_META: Record<string, { label: string }> = {
-  primary: { label: "Primary" },
-  secondary: { label: "Secondary" },
+  primary: { label: "기본" },
+  secondary: { label: "보조" },
 };
 
 type ChartTooltipPayloadEntry = {
@@ -107,7 +107,7 @@ export function AccountTrendChart({ primary, secondary }: AccountTrendChartProps
   if (data.length === 0) {
     return (
       <div className="flex h-[200px] items-center justify-center text-xs text-muted-foreground">
-        No trend data available
+        추이 데이터가 없습니다
       </div>
     );
   }

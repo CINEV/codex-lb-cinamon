@@ -29,22 +29,22 @@ export function useAccountMutations() {
   const importMutation = useMutation({
     mutationFn: importAccount,
     onSuccess: () => {
-      toast.success("Account imported");
+      toast.success("계정을 가져왔습니다");
       invalidateAccountRelatedQueries(queryClient);
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Import failed");
+      toast.error(error.message || "가져오기에 실패했습니다");
     },
   });
 
   const createPlatformMutation = useMutation({
     mutationFn: createPlatformIdentity,
     onSuccess: () => {
-      toast.success("OpenAI Platform identity added");
+      toast.success("OpenAI Platform 대체 ID를 추가했습니다");
       invalidateAccountRelatedQueries(queryClient);
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Failed to add OpenAI Platform identity");
+      toast.error(error.message || "OpenAI Platform 대체 ID를 추가하지 못했습니다");
     },
   });
 
@@ -57,44 +57,44 @@ export function useAccountMutations() {
       payload: PlatformIdentityUpdateRequest;
     }) => updatePlatformIdentity(accountId, payload),
     onSuccess: () => {
-      toast.success("OpenAI Platform identity updated");
+      toast.success("OpenAI Platform 대체 ID를 수정했습니다");
       invalidateAccountRelatedQueries(queryClient);
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Failed to update OpenAI Platform identity");
+      toast.error(error.message || "OpenAI Platform 대체 ID를 수정하지 못했습니다");
     },
   });
 
   const pauseMutation = useMutation({
     mutationFn: pauseAccount,
     onSuccess: () => {
-      toast.success("Account paused");
+      toast.success("계정을 일시 중지했습니다");
       invalidateAccountRelatedQueries(queryClient);
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Pause failed");
+      toast.error(error.message || "일시 중지에 실패했습니다");
     },
   });
 
   const resumeMutation = useMutation({
     mutationFn: reactivateAccount,
     onSuccess: () => {
-      toast.success("Account resumed");
+      toast.success("계정을 다시 활성화했습니다");
       invalidateAccountRelatedQueries(queryClient);
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Resume failed");
+      toast.error(error.message || "재활성화에 실패했습니다");
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: deleteAccount,
     onSuccess: () => {
-      toast.success("Account deleted");
+      toast.success("계정을 삭제했습니다");
       invalidateAccountRelatedQueries(queryClient);
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Delete failed");
+      toast.error(error.message || "삭제에 실패했습니다");
     },
   });
 

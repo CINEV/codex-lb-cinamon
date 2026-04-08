@@ -93,7 +93,7 @@ function parseApiErrorPayload(payload: unknown): {
   if (!parsed.success) {
     return {
       code: "request_failed",
-      message: "Request failed",
+      message: "요청에 실패했습니다",
       details: payload,
     };
   }
@@ -104,7 +104,7 @@ function parseApiErrorPayload(payload: unknown): {
   const message =
     typeof error.message === "string" && error.message.length > 0
       ? error.message
-      : "Request failed";
+      : "요청에 실패했습니다";
 
   return {
     code,

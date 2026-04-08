@@ -27,9 +27,9 @@ export function OverviewTimeframeSelect({
       <SelectTrigger
         size="sm"
         className="w-28"
-        aria-label="Overview timeframe"
+        aria-label="개요 기간"
       >
-        <SelectValue placeholder="Overview" />
+        <SelectValue placeholder="개요" />
       </SelectTrigger>
       <SelectContent align="end">
         <SelectItem value="1d">1d</SelectItem>

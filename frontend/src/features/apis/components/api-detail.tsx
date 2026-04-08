@@ -82,8 +82,8 @@ export function ApiDetail({
 
 	const usageMessage = useMemo(() => {
 		if (usage7Day) return null;
-		if (usage7DayLoading) return "Loading 7-day usage...";
-		if (usage7DayError) return "7-day usage unavailable";
+		if (usage7DayLoading) return "7일 사용량을 불러오는 중...";
+		if (usage7DayError) return "7일 사용량을 확인할 수 없음";
 		return null;
 	}, [usage7Day, usage7DayError, usage7DayLoading]);
 
@@ -94,10 +94,10 @@ export function ApiDetail({
 					<KeyRound className="h-5 w-5 text-muted-foreground" />
 				</div>
 				<p className="mt-3 text-sm font-medium text-muted-foreground">
-					Select an API key
+					API 키를 선택하세요
 				</p>
 				<p className="mt-1 text-xs text-muted-foreground/70">
-					Choose an API key from the list to view details.
+					목록에서 API 키를 선택하면 상세 정보를 볼 수 있습니다.
 				</p>
 			</div>
 		);
@@ -122,17 +122,17 @@ export function ApiDetail({
 							disabled={busy}
 						>
 							<Ellipsis className="size-4" />
-							<span className="sr-only">Actions</span>
+							<span className="sr-only">작업</span>
 						</Button>
 					</DropdownMenuTrigger>
 					<DropdownMenuContent align="end">
 						<DropdownMenuItem onClick={() => onEdit(apiKey)}>
 							<Pencil className="size-4" />
-							Edit
+							수정
 						</DropdownMenuItem>
 						<DropdownMenuItem onClick={() => onRegenerate(apiKey)}>
 							<RefreshCw className="size-4" />
-							Regenerate
+							재생성
 						</DropdownMenuItem>
 					</DropdownMenuContent>
 				</DropdownMenu>
@@ -142,16 +142,16 @@ export function ApiDetail({
 				<div className="flex items-center justify-end gap-3">
 					<div className="flex items-center gap-3 text-[10px] text-muted-foreground">
 						<span className="flex items-center gap-1.5">
-							Tokens
+							토큰
 							<span className="inline-block h-2 w-2 rounded-full bg-chart-2" />
 						</span>
 						<span className="flex items-center gap-1.5">
-							Cost
+							비용
 							<span className="inline-block h-2 w-2 rounded-full bg-chart-1" />
 						</span>
 					</div>
 					<div className="flex items-center gap-1.5 rounded-md border px-2 py-1">
-						<span className="text-[10px]">Accumulated</span>
+						<span className="text-[10px]">누적</span>
 						<Switch
 							size="sm"
 							checked={showAccumulated}
@@ -187,7 +187,7 @@ export function ApiDetail({
 						disabled={busy}
 					>
 						<Ellipsis className="h-3.5 w-3.5" />
-						Disable
+						비활성화
 					</Button>
 				) : (
 					<Button
@@ -198,7 +198,7 @@ export function ApiDetail({
 						disabled={busy}
 					>
 						<Play className="h-3.5 w-3.5" />
-						Enable
+						활성화
 					</Button>
 				)}
 				<Button
@@ -210,7 +210,7 @@ export function ApiDetail({
 					disabled={busy}
 				>
 					<Trash2 className="h-3.5 w-3.5" />
-					Delete
+					삭제
 				</Button>
 			</div>
 		</div>

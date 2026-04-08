@@ -93,9 +93,9 @@ export function LimitRulesEditor({ rules, onChange }: LimitRulesEditorProps) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">Limits</span>
+        <span className="text-sm font-medium">제한</span>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Advanced</span>
+          <span className="text-xs text-muted-foreground">고급</span>
           <Switch
             checked={advanced}
             onCheckedChange={setAdvanced}
@@ -106,17 +106,17 @@ export function LimitRulesEditor({ rules, onChange }: LimitRulesEditorProps) {
       {!advanced ? (
         <div className="space-y-2">
           <div>
-            <label className="text-xs text-muted-foreground">Weekly token limit</label>
+            <label className="text-xs text-muted-foreground">주간 토큰 제한</label>
             <Input
               type="number"
               min={1}
               value={weeklyTokenRule ? String(weeklyTokenRule.maxValue) : ""}
               onChange={(e) => handleBasicTokenChange(e.target.value)}
-              placeholder="No limit"
+              placeholder="제한 없음"
             />
           </div>
           <div>
-            <label className="text-xs text-muted-foreground">Weekly cost limit ($)</label>
+            <label className="text-xs text-muted-foreground">주간 비용 제한 ($)</label>
             <Input
               type="number"
               min={0.01}
@@ -127,7 +127,7 @@ export function LimitRulesEditor({ rules, onChange }: LimitRulesEditorProps) {
                   : ""
               }
               onChange={(e) => handleBasicCostChange(e.target.value)}
-              placeholder="No limit"
+              placeholder="제한 없음"
             />
           </div>
         </div>
@@ -149,11 +149,11 @@ export function LimitRulesEditor({ rules, onChange }: LimitRulesEditorProps) {
             onClick={addRule}
           >
             <Plus className="mr-1 size-3.5" />
-            Add limit rule
+            제한 규칙 추가
           </Button>
           {rules.length > 1 ? (
             <p className="text-xs text-muted-foreground">
-              All rules are applied together (AND). A request is blocked if any limit is exceeded.
+              모든 규칙은 함께 적용됩니다(AND). 하나라도 초과하면 요청이 차단됩니다.
             </p>
           ) : null}
         </div>

@@ -73,7 +73,7 @@ export function ApiListItem({ apiKey, selected, onSelect }: ApiListItemProps) {
               : "bg-emerald-500 text-white",
           )}
         >
-          {!apiKey.isActive ? "Disabled" : expired ? "Expired" : "Active"}
+          {!apiKey.isActive ? "비활성" : expired ? "만료됨" : "활성"}
         </Badge>
       </div>
       <div className="mt-1.5">

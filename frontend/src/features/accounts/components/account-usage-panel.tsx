@@ -32,7 +32,7 @@ function QuotaRow({
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between text-xs">
-        <span className="font-medium">{label} remaining</span>
+        <span className="font-medium">{label} 잔여량</span>
         <span
           className={cn(
             "tabular-nums font-medium",
@@ -56,7 +56,7 @@ function QuotaRow({
       </div>
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <Clock className="h-3 w-3 shrink-0" />
-        <span>Reset {formatQuotaResetLabel(resetAt ?? null)}</span>
+        <span>리셋 {formatQuotaResetLabel(resetAt ?? null)}</span>
       </div>
     </div>
   );
@@ -80,8 +80,8 @@ function formatAdditionalLimitName(limitName: string, quotaKey?: string | null):
 function formatResetCountdown(resetAt: number | null): string | null {
   if (resetAt === null) return null;
   const diffMs = resetAt * 1000 - Date.now();
-  if (diffMs <= 0) return "Resetting...";
-  return `Resets ${formatResetRelative(diffMs)}`;
+  if (diffMs <= 0) return "리셋 중...";
+  return `${formatResetRelative(diffMs)} 리셋`;
 }
 
 function AdditionalQuotaRow({
@@ -100,7 +100,7 @@ function AdditionalQuotaRow({
     <div className="space-y-1.5">
       <div className="flex items-center justify-between text-xs">
         <span className="text-muted-foreground">{label}</span>
-        <span className="tabular-nums font-medium">{Math.round(usedPercent)}% used</span>
+        <span className="tabular-nums font-medium">{Math.round(usedPercent)}% 사용됨</span>
       </div>
       <div className="h-1.5 rounded-full bg-muted">
         <div
@@ -132,26 +132,26 @@ export function AccountUsagePanel({ account, trends }: AccountUsagePanelProps) {
 
   return (
     <div className="space-y-4 rounded-lg border bg-muted/30 p-4">
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Usage</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">사용량</h3>
       <div className={cn("grid gap-4", weeklyOnly ? "grid-cols-1" : "grid-cols-2")}>
-        {!weeklyOnly && <QuotaRow label="5h" percent={primary} resetAt={account.resetAtPrimary} />}
-        <QuotaRow label="Weekly" percent={secondary} resetAt={account.resetAtSecondary} />
+        {!weeklyOnly && <QuotaRow label="5시간" percent={primary} resetAt={account.resetAtPrimary} />}
+        <QuotaRow label="주간" percent={secondary} resetAt={account.resetAtSecondary} />
       </div>
       <div className="rounded-md border bg-background/60 px-3 py-2">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Request logs total</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">요청 로그 합계</p>
         {hasRequestUsage ? (
           <p className="mt-1 text-xs tabular-nums text-muted-foreground">
-            {formatCompactNumber(requestUsage?.totalTokens)} tok | {formatCompactNumber(requestUsage?.cachedInputTokens)} cached |{" "}
-            {formatCompactNumber(requestUsage?.requestCount)} req | {formatCurrency(requestUsage?.totalCostUsd)}
+            {formatCompactNumber(requestUsage?.totalTokens)} tok | {formatCompactNumber(requestUsage?.cachedInputTokens)} 캐시 |{" "}
+            {formatCompactNumber(requestUsage?.requestCount)} 요청 | {formatCurrency(requestUsage?.totalCostUsd)}
           </p>
         ) : (
-          <p className="mt-1 text-xs text-muted-foreground">No request usage yet.</p>
+          <p className="mt-1 text-xs text-muted-foreground">아직 요청 사용량이 없습니다.</p>
         )}
       </div>
       {account.additionalQuotas.length > 0 ? (
         <div className="space-y-3">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Additional Quotas
+            추가 할당량
           </p>
           {account.additionalQuotas.map((quota) => (
             <div key={quota.quotaKey ?? quota.limitName} className="rounded-md border bg-background/60 px-3 py-2 space-y-2">
@@ -179,7 +179,7 @@ export function AccountUsagePanel({ account, trends }: AccountUsagePanelProps) {
       {hasTrends && (
         <div className="pt-3">
           <div className="mb-2 flex items-center justify-between">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">7-day trend</h4>
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">7일 추이</h4>
             <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
               <span className="flex items-center gap-1.5">
                 <span className="inline-block h-2 w-2 rounded-full bg-chart-1" />
@@ -187,7 +187,7 @@ export function AccountUsagePanel({ account, trends }: AccountUsagePanelProps) {
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="inline-block h-2 w-2 rounded-full bg-chart-2" />
-                Weekly
+                주간
               </span>
             </div>
           </div>

@@ -1,29 +1,29 @@
 export const STATUS_LABELS = {
-  active: "Active",
-  paused: "Paused",
-  limited: "Rate limited",
-  exceeded: "Quota exceeded",
-  deactivated: "Deactivated",
+  active: "활성",
+  paused: "일시 중지",
+  limited: "속도 제한",
+  exceeded: "할당량 초과",
+  deactivated: "비활성화",
 } as const;
 
 export const ERROR_LABELS = {
-  rate_limit: "rate limit",
-  quota: "quota",
-  timeout: "timeout",
-  upstream: "upstream",
-  rate_limit_exceeded: "rate limit",
-  usage_limit_reached: "quota",
-  insufficient_quota: "quota",
-  usage_not_included: "quota",
-  quota_exceeded: "quota",
-  upstream_error: "upstream",
+  rate_limit: "속도 제한",
+  quota: "할당량",
+  timeout: "시간 초과",
+  upstream: "업스트림",
+  rate_limit_exceeded: "속도 제한",
+  usage_limit_reached: "할당량",
+  insufficient_quota: "할당량",
+  usage_not_included: "할당량",
+  quota_exceeded: "할당량",
+  upstream_error: "업스트림",
 } as const;
 
 export const ROUTING_LABELS = {
-  usage_weighted: "usage weighted",
-  round_robin: "round robin",
-  capacity_weighted: "capacity weighted",
-  sticky: "sticky",
+  usage_weighted: "사용량 가중치",
+  round_robin: "라운드 로빈",
+  capacity_weighted: "용량 가중치",
+  sticky: "고정",
 } as const;
 
 export const KNOWN_PLAN_TYPES = new Set([
@@ -58,37 +58,37 @@ export const DONUT_COLORS = DONUT_COLORS_LIGHT;
 
 export const MESSAGE_TONE_META = {
   success: {
-    label: "Success",
+    label: "성공",
     className: "active",
-    defaultTitle: "Import complete",
+    defaultTitle: "가져오기 완료",
   },
   error: {
-    label: "Error",
+    label: "오류",
     className: "deactivated",
-    defaultTitle: "Import failed",
+    defaultTitle: "가져오기 실패",
   },
   warning: {
-    label: "Warning",
+    label: "경고",
     className: "limited",
-    defaultTitle: "Attention",
+    defaultTitle: "주의",
   },
   info: {
-    label: "Info",
+    label: "정보",
     className: "limited",
-    defaultTitle: "Message",
+    defaultTitle: "메시지",
   },
   question: {
-    label: "Question",
+    label: "질문",
     className: "limited",
-    defaultTitle: "Confirm",
+    defaultTitle: "확인",
   },
 } as const;
 
 export const REQUEST_STATUS_LABELS: Record<string, string> = {
   ok: "OK",
-  rate_limit: "Rate limit",
-  quota: "Quota",
-  error: "Error",
+  rate_limit: "속도 제한",
+  quota: "할당량",
+  error: "오류",
 };
 
 export const RESET_ERROR_LABEL = "--";

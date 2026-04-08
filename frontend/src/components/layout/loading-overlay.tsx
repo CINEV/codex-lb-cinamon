@@ -10,7 +10,7 @@ export type LoadingOverlayProps = {
 
 export function LoadingOverlay({
   visible,
-  label = "Loading...",
+  label = "불러오는 중...",
   className,
 }: LoadingOverlayProps) {
   if (!visible) {

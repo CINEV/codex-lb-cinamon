@@ -81,12 +81,12 @@ export function ApiKeysSection({
             <KeySquare className="h-4 w-4 text-primary" aria-hidden="true" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold">API Keys</h3>
-            <p className="text-xs text-muted-foreground">Create and manage API keys for clients.</p>
+            <h3 className="text-sm font-semibold">API 키</h3>
+            <p className="text-xs text-muted-foreground">클라이언트용 API 키를 생성하고 관리합니다.</p>
           </div>
         </div>
         <Button type="button" size="sm" className="h-8 text-xs" onClick={() => createDialog.show()} disabled={busy}>
-          Create key
+          키 생성
         </Button>
       </div>
 
@@ -133,9 +133,9 @@ export function ApiKeysSection({
 
       <ConfirmDialog
         open={deleteDialog.open}
-        title="Delete API key"
-        description="This key will stop working immediately."
-        confirmLabel="Delete"
+        title="API 키 삭제"
+        description="이 키는 즉시 동작을 멈춥니다."
+        confirmLabel="삭제"
         onOpenChange={deleteDialog.onOpenChange}
         onConfirm={() => {
           if (!deleteDialog.data) {

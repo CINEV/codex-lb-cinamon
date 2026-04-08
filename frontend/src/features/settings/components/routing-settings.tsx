@@ -42,8 +42,8 @@ export function RoutingSettings({ settings, busy, onSave }: RoutingSettingsProps
               <Route className="h-4 w-4 text-primary" aria-hidden="true" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold">Routing</h3>
-              <p className="text-xs text-muted-foreground">Control how requests are distributed across accounts.</p>
+              <h3 className="text-sm font-semibold">라우팅</h3>
+              <p className="text-xs text-muted-foreground">요청을 계정에 어떻게 분배할지 설정합니다.</p>
             </div>
           </div>
         </div>
@@ -51,9 +51,9 @@ export function RoutingSettings({ settings, busy, onSave }: RoutingSettingsProps
         <div className="divide-y rounded-lg border">
           <div className="flex items-center justify-between gap-4 p-3">
             <div>
-              <p className="text-sm font-medium">Upstream stream transport</p>
+              <p className="text-sm font-medium">업스트림 스트림 전송 방식</p>
               <p className="text-xs text-muted-foreground">
-                Choose how `codex-lb` connects upstream for streaming responses.
+                `codex-lb`가 스트리밍 응답을 위해 업스트림에 연결하는 방식을 선택합니다.
               </p>
             </div>
             <Select
@@ -66,18 +66,18 @@ export function RoutingSettings({ settings, busy, onSave }: RoutingSettingsProps
                 <SelectValue />
               </SelectTrigger>
               <SelectContent align="end">
-                <SelectItem value="default">Server default</SelectItem>
-                <SelectItem value="auto">Auto</SelectItem>
+                <SelectItem value="default">서버 기본값</SelectItem>
+                <SelectItem value="auto">자동</SelectItem>
                 <SelectItem value="http">Responses</SelectItem>
-                <SelectItem value="websocket">WebSockets</SelectItem>
+                <SelectItem value="websocket">웹소켓</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           <div className="flex items-center justify-between gap-4 p-3">
             <div>
-              <p className="text-sm font-medium">Routing strategy</p>
-              <p className="text-xs text-muted-foreground">Choose how requests are distributed across accounts.</p>
+              <p className="text-sm font-medium">라우팅 전략</p>
+              <p className="text-xs text-muted-foreground">요청을 계정에 분배하는 방식을 선택합니다.</p>
             </div>
             <Select
               value={settings.routingStrategy}
@@ -87,17 +87,17 @@ export function RoutingSettings({ settings, busy, onSave }: RoutingSettingsProps
                 <SelectValue />
               </SelectTrigger>
               <SelectContent align="end">
-                <SelectItem value="capacity_weighted">Capacity weighted</SelectItem>
-                <SelectItem value="usage_weighted">Usage weighted</SelectItem>
-                <SelectItem value="round_robin">Round robin</SelectItem>
+                <SelectItem value="capacity_weighted">용량 가중치</SelectItem>
+                <SelectItem value="usage_weighted">사용량 가중치</SelectItem>
+                <SelectItem value="round_robin">라운드 로빈</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           <div className="flex items-center justify-between p-3">
             <div>
-              <p className="text-sm font-medium">Sticky threads</p>
-              <p className="text-xs text-muted-foreground">Keep related requests on the same account.</p>
+              <p className="text-sm font-medium">고정 스레드</p>
+              <p className="text-xs text-muted-foreground">관련 요청을 같은 계정에 유지합니다.</p>
             </div>
             <Switch
               checked={settings.stickyThreadsEnabled}
@@ -108,8 +108,8 @@ export function RoutingSettings({ settings, busy, onSave }: RoutingSettingsProps
 
           <div className="flex items-center justify-between p-3">
             <div>
-              <p className="text-sm font-medium">Prefer earlier reset</p>
-              <p className="text-xs text-muted-foreground">Bias traffic to accounts with earlier quota reset.</p>
+              <p className="text-sm font-medium">빠른 리셋 우선</p>
+              <p className="text-xs text-muted-foreground">할당량이 더 빨리 초기화되는 계정으로 트래픽을 우선 보냅니다.</p>
             </div>
             <Switch
               checked={settings.preferEarlierResetAccounts}
@@ -120,9 +120,9 @@ export function RoutingSettings({ settings, busy, onSave }: RoutingSettingsProps
 
           <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm font-medium">Prompt-cache affinity TTL</p>
+              <p className="text-sm font-medium">프롬프트 캐시 affinity TTL</p>
               <p className="text-xs text-muted-foreground">
-                Keep OpenAI-style prompt-cache mappings warm for a bounded number of seconds.
+                OpenAI 스타일 프롬프트 캐시 매핑을 일정 시간 동안 유지합니다.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -149,7 +149,7 @@ export function RoutingSettings({ settings, busy, onSave }: RoutingSettingsProps
                 disabled={busy || !cacheAffinityTtlChanged}
                 onClick={() => void save({ openaiCacheAffinityMaxAgeSeconds: parsedCacheAffinityTtl })}
               >
-                Save TTL
+                TTL 저장
               </Button>
             </div>
           </div>

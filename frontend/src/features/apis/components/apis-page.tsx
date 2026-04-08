@@ -109,9 +109,9 @@ export function ApisPage() {
 	return (
 		<div className="animate-fade-in-up space-y-6">
 			<div>
-				<h1 className="text-2xl font-semibold tracking-tight">APIs</h1>
+				<h1 className="text-2xl font-semibold tracking-tight">API</h1>
 				<p className="mt-1 text-sm text-muted-foreground">
-					Manage API keys for client access and usage monitoring.
+					클라이언트 접근과 사용량 모니터링을 위한 API 키를 관리합니다.
 				</p>
 			</div>
 
@@ -124,7 +124,7 @@ export function ApisPage() {
 			) : !apiKeysQuery.data ? (
 				<div className="space-y-3 rounded-xl border bg-card p-4">
 					<AlertMessage variant="error">
-						{listError ?? "Failed to load API keys"}
+						{listError ?? "API 키를 불러오지 못했습니다"}
 					</AlertMessage>
 					<Button
 						type="button"
@@ -135,7 +135,7 @@ export function ApisPage() {
 						}}
 						disabled={apiKeysQuery.isFetching}
 					>
-						Retry
+						다시 시도
 					</Button>
 				</div>
 			) : (
@@ -203,9 +203,9 @@ export function ApisPage() {
 
 			<ConfirmDialog
 				open={deleteDialog.open}
-				title="Delete API key"
-				description="This key will stop working immediately."
-				confirmLabel="Delete"
+				title="API 키 삭제"
+				description="이 키는 즉시 동작을 멈춥니다."
+				confirmLabel="삭제"
 				onOpenChange={deleteDialog.onOpenChange}
 				onConfirm={() => {
 					if (!deleteDialog.data) return;
@@ -220,7 +220,7 @@ export function ApisPage() {
 
 			<LoadingOverlay
 				visible={!!apiKeysQuery.data && mutationBusy}
-				label="Updating API keys..."
+				label="API 키 업데이트 중..."
 			/>
 		</div>
 	);

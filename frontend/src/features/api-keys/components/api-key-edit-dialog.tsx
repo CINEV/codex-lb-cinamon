@@ -32,7 +32,7 @@ import { parseDate } from "@/utils/formatters";
 import { hasLimitRuleChanges, normalizeLimitRules } from "./limit-rules-utils";
 
 const formSchema = z.object({
-  name: z.string().min(1, "Name is required"),
+  name: z.string().min(1, "이름은 필수입니다"),
   isActive: z.boolean(),
 });
 
@@ -127,14 +127,14 @@ function ApiKeyEditForm({ apiKey, busy, onSubmit, onClose }: ApiKeyEditFormProps
         <div className="grid gap-x-6 sm:grid-cols-2">
           {/* Left column — General */}
           <div className="max-h-[55vh] space-y-3 overflow-y-auto overscroll-contain pl-1 pr-2">
-            <h4 className="sticky top-0 bg-background pb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">General</h4>
+            <h4 className="sticky top-0 bg-background pb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">일반</h4>
 
             <FormField
               control={form.control}
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Name</FormLabel>
+                  <FormLabel>이름</FormLabel>
                   <FormControl>
                     <Input {...field} autoComplete="off" />
                   </FormControl>
@@ -144,60 +144,60 @@ function ApiKeyEditForm({ apiKey, busy, onSubmit, onClose }: ApiKeyEditFormProps
             />
 
             <div className="space-y-1">
-              <div className="text-sm font-medium">Allowed models</div>
+              <div className="text-sm font-medium">허용 모델</div>
               <ModelMultiSelect value={selectedModels} onChange={setSelectedModels} />
             </div>
 
             <div className="space-y-1">
-              <div className="text-sm font-medium">Assigned accounts</div>
+              <div className="text-sm font-medium">할당 계정</div>
               <AccountMultiSelect value={selectedAccountIds} onChange={setSelectedAccountIds} />
             </div>
 
             <div className="space-y-1">
-              <div className="text-sm font-medium">Enforced model</div>
+              <div className="text-sm font-medium">강제 모델</div>
               <Input
                 value={enforcedModel}
                 onChange={(e) => setEnforcedModel(e.target.value)}
-                placeholder="e.g. gpt-5.3-codex"
+                placeholder="예: gpt-5.3-codex"
                 autoComplete="off"
               />
             </div>
 
             <div className="space-y-1">
-              <div className="text-sm font-medium">Enforced reasoning</div>
+              <div className="text-sm font-medium">강제 추론 수준</div>
               <Select value={enforcedReasoningEffort} onValueChange={setEnforcedReasoningEffort}>
                 <SelectTrigger>
-                  <SelectValue placeholder="None" />
+                  <SelectValue placeholder="없음" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  <SelectItem value="minimal">Minimal</SelectItem>
-                  <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                  <SelectItem value="xhigh">XHigh</SelectItem>
+                  <SelectItem value="none">없음</SelectItem>
+                  <SelectItem value="minimal">최소</SelectItem>
+                  <SelectItem value="low">낮음</SelectItem>
+                  <SelectItem value="medium">중간</SelectItem>
+                  <SelectItem value="high">높음</SelectItem>
+                  <SelectItem value="xhigh">매우 높음</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-1">
-              <div className="text-sm font-medium">Enforced service tier</div>
+              <div className="text-sm font-medium">강제 서비스 티어</div>
               <Select value={enforcedServiceTier} onValueChange={setEnforcedServiceTier}>
                 <SelectTrigger>
-                  <SelectValue placeholder="None" />
+                  <SelectValue placeholder="없음" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  <SelectItem value="auto">Auto</SelectItem>
-                  <SelectItem value="default">Default</SelectItem>
-                  <SelectItem value="priority">Priority</SelectItem>
+                  <SelectItem value="none">없음</SelectItem>
+                  <SelectItem value="auto">자동</SelectItem>
+                  <SelectItem value="default">기본값</SelectItem>
+                  <SelectItem value="priority">우선</SelectItem>
                   <SelectItem value="flex">Flex</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-1">
-              <div className="text-sm font-medium">Expiry</div>
+              <div className="text-sm font-medium">만료</div>
               <ExpiryPicker value={expiresAt} onChange={setExpiresAt} />
             </div>
 
@@ -206,7 +206,7 @@ function ApiKeyEditForm({ apiKey, busy, onSubmit, onClose }: ApiKeyEditFormProps
               name="isActive"
               render={({ field }) => (
                 <div className="flex items-center justify-between rounded-md border p-2">
-                  <span className="text-sm">Active</span>
+                  <span className="text-sm">활성</span>
                   <Switch checked={field.value} onCheckedChange={field.onChange} />
                 </div>
               )}
@@ -215,12 +215,12 @@ function ApiKeyEditForm({ apiKey, busy, onSubmit, onClose }: ApiKeyEditFormProps
 
           {/* Right column — Limits */}
           <div className="max-h-[55vh] space-y-3 overflow-y-auto overscroll-contain pl-1 pr-2 max-sm:mt-3 max-sm:border-t max-sm:pt-3">
-            <h4 className="sticky top-0 bg-background pb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Limits</h4>
+            <h4 className="sticky top-0 bg-background pb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">제한</h4>
             <LimitRulesEditor rules={limitRules} onChange={setLimitRules} />
 
             {apiKey.limits.length > 0 ? (
               <div className="space-y-1">
-                <div className="text-xs font-medium text-muted-foreground">Current usage</div>
+                <div className="text-xs font-medium text-muted-foreground">현재 사용량</div>
                 <div className="space-y-1">
                   {apiKey.limits.map((limit) => (
                     <LimitUsageBar key={limit.id} limit={limit} />
@@ -233,7 +233,7 @@ function ApiKeyEditForm({ apiKey, busy, onSubmit, onClose }: ApiKeyEditFormProps
 
         <DialogFooter className="mt-4">
           <Button type="submit" disabled={busy || form.formState.isSubmitting}>
-            Save
+            저장
           </Button>
         </DialogFooter>
       </form>
@@ -271,11 +271,11 @@ function LimitUsageBar({ limit }: { limit: ApiKey["limits"][number] }) {
 }
 
 const LIMIT_TYPE_SHORT: Record<LimitType, string> = {
-  total_tokens: "Tokens",
-  input_tokens: "Input",
-  output_tokens: "Output",
-  cost_usd: "Cost",
-  credits: "Credits",
+  total_tokens: "토큰",
+  input_tokens: "입력",
+  output_tokens: "출력",
+  cost_usd: "비용",
+  credits: "크레딧",
 };
 
 function formatTokenCount(n: number): string {
@@ -289,8 +289,8 @@ export function ApiKeyEditDialog({ open, busy, apiKey, onOpenChange, onSubmit }:
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Edit API key</DialogTitle>
-          <DialogDescription>Update restrictions and lifecycle settings.</DialogDescription>
+          <DialogTitle>API 키 수정</DialogTitle>
+          <DialogDescription>제한과 수명 주기 설정을 수정합니다.</DialogDescription>
         </DialogHeader>
 
         {apiKey ? (
@@ -302,7 +302,7 @@ export function ApiKeyEditDialog({ open, busy, apiKey, onOpenChange, onSubmit }:
             onClose={() => onOpenChange(false)}
           />
         ) : (
-          <p className="text-sm text-muted-foreground">Select an API key to edit.</p>
+          <p className="text-sm text-muted-foreground">수정할 API 키를 선택하세요.</p>
         )}
       </DialogContent>
     </Dialog>

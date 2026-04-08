@@ -52,14 +52,14 @@ export function UsageDonuts({
 	return (
 		<div className="grid gap-4 lg:grid-cols-2">
 			<DonutChart
-				title="5h Remaining"
+				title="5시간 잔여량"
 				items={primaryChartItems}
 				total={primaryTotal}
 				centerValue={primaryCenterValue}
 				safeLine={safeLinePrimary}
 			/>
 			<DonutChart
-				title="Weekly Remaining"
+				title="주간 잔여량"
 				items={secondaryChartItems}
 				total={secondaryTotal}
 				centerValue={secondaryCenterValue}

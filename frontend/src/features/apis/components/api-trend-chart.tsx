@@ -58,8 +58,8 @@ function formatTokenTick(value: number): string {
 }
 
 const SERIES_META: Record<string, { label: string; formatter: (v: number) => string }> = {
-  cost: { label: "Cost", formatter: formatCurrency },
-  tokens: { label: "Tokens", formatter: (v) => formatCompactNumber(v) },
+  cost: { label: "비용", formatter: formatCurrency },
+  tokens: { label: "토큰", formatter: (v) => formatCompactNumber(v) },
 };
 
 type ChartTooltipPayloadEntry = {
@@ -125,7 +125,7 @@ export function ApiTrendChart({ cost, tokens }: ApiTrendChartProps) {
   if (data.length === 0) {
     return (
       <div className="flex h-[280px] items-center justify-center text-xs text-muted-foreground">
-        No trend data available
+        추이 데이터가 없습니다
       </div>
     );
   }

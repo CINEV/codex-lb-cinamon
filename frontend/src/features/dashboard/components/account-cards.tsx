@@ -18,8 +18,8 @@ export function AccountCards({ accounts, onAction }: AccountCardsProps) {
     return (
       <EmptyState
         icon={Users}
-        title="No accounts connected yet"
-        description="Import or authenticate an account to get started."
+        title="연결된 계정이 없습니다"
+        description="시작하려면 계정을 가져오거나 인증하세요."
       />
     );
   }

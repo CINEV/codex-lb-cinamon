@@ -51,8 +51,8 @@ export function TotpDialog({ open }: TotpDialogProps) {
         onInteractOutside={(event) => event.preventDefault()}
       >
         <DialogHeader>
-          <DialogTitle>Two-factor verification</DialogTitle>
-          <DialogDescription>Enter the 6-digit code from your authenticator app.</DialogDescription>
+          <DialogTitle>2단계 인증 확인</DialogTitle>
+          <DialogDescription>인증 앱에 표시된 6자리 코드를 입력하세요.</DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -62,7 +62,7 @@ export function TotpDialog({ open }: TotpDialogProps) {
               name="code"
               render={({ field }) => (
                 <FormItem className="flex flex-col items-center gap-2">
-                  <FormLabel className="sr-only">TOTP code</FormLabel>
+                  <FormLabel className="sr-only">TOTP 코드</FormLabel>
                   <FormControl>
                     <InputOTP
                       maxLength={6}
@@ -93,7 +93,7 @@ export function TotpDialog({ open }: TotpDialogProps) {
 
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? <Spinner size="sm" className="mr-2" /> : null}
-              Verify
+              확인
             </Button>
           </form>
         </Form>

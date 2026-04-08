@@ -74,7 +74,7 @@ export function AccountList({
         <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" aria-hidden />
           <Input
-            placeholder="Search accounts..."
+            placeholder="계정 검색..."
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             className="h-8 pl-8"
@@ -82,12 +82,12 @@ export function AccountList({
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger size="sm" className="w-32 shrink-0">
-            <SelectValue placeholder="Status" />
+            <SelectValue placeholder="상태" />
           </SelectTrigger>
           <SelectContent>
             {STATUS_FILTER_OPTIONS.map((option) => (
               <SelectItem key={option} value={option}>
-                {option === "all" ? "All statuses" : formatSlug(option)}
+                {option === "all" ? "전체 상태" : formatSlug(option)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -97,11 +97,11 @@ export function AccountList({
       <div className="grid grid-cols-3 gap-2">
         <Button type="button" size="sm" variant="outline" onClick={onOpenImport} className="h-8 gap-1.5 px-2 text-xs">
           <Upload className="h-3.5 w-3.5" />
-          Import
+          가져오기
         </Button>
         <Button type="button" size="sm" onClick={onOpenOauth} className="h-8 gap-1.5 px-2 text-xs">
           <Plus className="h-3.5 w-3.5" />
-          Add Account
+          계정 추가
         </Button>
         <Button
           type="button"
@@ -112,16 +112,16 @@ export function AccountList({
           className="h-8 gap-1.5 px-2 text-xs"
         >
           <KeyRound className="h-3.5 w-3.5" />
-          Add API Key
+          API 키 추가
         </Button>
       </div>
       {platformIdentityRegistered ? (
         <p className="text-xs text-muted-foreground">
-          A Platform fallback key is already registered. Phase 1 allows only one.
+          Platform 폴백 키는 이미 등록되어 있습니다. 현재는 하나만 허용됩니다.
         </p>
       ) : !platformPrerequisiteSatisfied ? (
         <p className="text-xs text-muted-foreground">
-          Add or reactivate a ChatGPT account before registering a Platform fallback key.
+          Platform 폴백 키를 등록하기 전에 ChatGPT 계정을 추가하거나 다시 활성화하세요.
         </p>
       ) : null}
 
@@ -133,7 +133,7 @@ export function AccountList({
           className="h-auto px-0 text-xs"
           onClick={() => setHelpOpen((current) => !current)}
         >
-          Need help?
+          도움이 필요하신가요?
           {helpOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
         </Button>
       </div>
@@ -143,8 +143,8 @@ export function AccountList({
       <div className="max-h-[calc(100vh-16rem)] space-y-1 overflow-y-auto p-1">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed p-6 text-center">
-            <p className="text-sm font-medium text-muted-foreground">No matching accounts</p>
-            <p className="text-xs text-muted-foreground/70">Try adjusting your filters.</p>
+            <p className="text-sm font-medium text-muted-foreground">일치하는 계정이 없습니다</p>
+            <p className="text-xs text-muted-foreground/70">필터를 조정해보세요.</p>
           </div>
         ) : (
           filtered.map((account) => (

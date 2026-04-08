@@ -28,11 +28,11 @@ export function useApiKeys() {
   const createMutation = useMutation({
     mutationFn: (payload: ApiKeyCreateRequest) => createApiKey(payload),
     onSuccess: () => {
-      toast.success("API key created");
+      toast.success("API 키를 생성했습니다");
       invalidate();
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Failed to create API key");
+      toast.error(error.message || "API 키를 생성하지 못했습니다");
     },
   });
 
@@ -40,33 +40,33 @@ export function useApiKeys() {
     mutationFn: ({ keyId, payload }: { keyId: string; payload: ApiKeyUpdateRequest }) =>
       updateApiKey(keyId, payload),
     onSuccess: () => {
-      toast.success("API key updated");
+      toast.success("API 키를 수정했습니다");
       invalidate();
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Failed to update API key");
+      toast.error(error.message || "API 키를 수정하지 못했습니다");
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (keyId: string) => deleteApiKey(keyId),
     onSuccess: () => {
-      toast.success("API key deleted");
+      toast.success("API 키를 삭제했습니다");
       invalidate();
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Failed to delete API key");
+      toast.error(error.message || "API 키를 삭제하지 못했습니다");
     },
   });
 
   const regenerateMutation = useMutation({
     mutationFn: (keyId: string) => regenerateApiKey(keyId),
     onSuccess: () => {
-      toast.success("API key regenerated");
+      toast.success("API 키를 재생성했습니다");
       invalidate();
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Failed to regenerate API key");
+      toast.error(error.message || "API 키를 재생성하지 못했습니다");
     },
   });
 

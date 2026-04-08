@@ -19,17 +19,17 @@ import {
 } from "@/features/api-keys/schemas";
 
 const LIMIT_TYPE_LABELS: Record<LimitType, string> = {
-  total_tokens: "Total Tokens",
-  input_tokens: "Input Tokens",
-  output_tokens: "Output Tokens",
-  cost_usd: "Cost ($)",
-  credits: "Credits",
+  total_tokens: "전체 토큰",
+  input_tokens: "입력 토큰",
+  output_tokens: "출력 토큰",
+  cost_usd: "비용 ($)",
+  credits: "크레딧",
 };
 
 const WINDOW_LABELS: Record<LimitWindowType, string> = {
-  daily: "Daily",
-  weekly: "Weekly",
-  monthly: "Monthly",
+  daily: "일간",
+  weekly: "주간",
+  monthly: "월간",
   "5h": "5h",
   "7d": "7d",
 };
@@ -99,7 +99,7 @@ export function LimitRuleCard({ rule, onChange, onRemove }: LimitRuleCardProps) 
   return (
     <div className="flex flex-col gap-2 rounded-lg border p-3">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-muted-foreground">Limit rule</span>
+        <span className="text-xs font-medium text-muted-foreground">제한 규칙</span>
         <Button type="button" variant="ghost" size="sm" onClick={onRemove}>
           <Trash2 className="size-3.5" />
         </Button>
@@ -107,7 +107,7 @@ export function LimitRuleCard({ rule, onChange, onRemove }: LimitRuleCardProps) 
 
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <label className="text-xs text-muted-foreground">Type</label>
+          <label className="text-xs text-muted-foreground">종류</label>
           <Select value={rule.limitType} onValueChange={handleLimitTypeChange}>
             <SelectTrigger className="h-8 text-xs">
               <SelectValue />
@@ -123,7 +123,7 @@ export function LimitRuleCard({ rule, onChange, onRemove }: LimitRuleCardProps) 
         </div>
 
         <div>
-          <label className="text-xs text-muted-foreground">Window</label>
+          <label className="text-xs text-muted-foreground">기간</label>
           <Select value={rule.limitWindow} onValueChange={handleWindowChange}>
             <SelectTrigger className="h-8 text-xs">
               <SelectValue />
@@ -141,7 +141,7 @@ export function LimitRuleCard({ rule, onChange, onRemove }: LimitRuleCardProps) 
 
       <div>
         <label className="text-xs text-muted-foreground">
-          {isCost ? "Max value (USD)" : isCredits ? "Max value (credits)" : "Max value (tokens)"}
+          {isCost ? "최대값 (USD)" : isCredits ? "최대값 (크레딧)" : "최대값 (토큰)"}
         </label>
         <Input
           type="number"
@@ -154,14 +154,14 @@ export function LimitRuleCard({ rule, onChange, onRemove }: LimitRuleCardProps) 
       </div>
 
       <div>
-        <label className="text-xs text-muted-foreground">Model filter</label>
+        <label className="text-xs text-muted-foreground">모델 필터</label>
         <ModelMultiSelect
           value={modelFilterArray}
           onChange={(models) => {
             if (isCredits) return;
             onChange({ ...rule, modelFilter: models[0] || null });
           }}
-          placeholder={isCredits ? "Credits limits apply globally" : "All models"}
+          placeholder={isCredits ? "크레딧 제한은 전체에 적용됩니다" : "전체 모델"}
         />
       </div>
     </div>

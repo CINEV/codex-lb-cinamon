@@ -22,7 +22,7 @@ export type AccountMultiSelectProps = {
 export function AccountMultiSelect({
   value,
   onChange,
-  placeholder = "All accounts",
+  placeholder = "전체 계정",
 }: AccountMultiSelectProps) {
   const { accountsQuery } = useAccounts();
   const accounts = accountsQuery.data ?? [];
@@ -71,7 +71,7 @@ export function AccountMultiSelect({
   }, [onChange]);
 
   const label =
-    value.length === 0 ? placeholder : `${value.length} account${value.length > 1 ? "s" : ""} selected`;
+    value.length === 0 ? placeholder : `${value.length}개 계정 선택됨`;
 
   return (
     <div className="space-y-1.5">
@@ -84,7 +84,7 @@ export function AccountMultiSelect({
             disabled={accountsQuery.isLoading}
           >
             <span className="truncate text-left">
-              {accountsQuery.isLoading ? "Loading accounts..." : label}
+              {accountsQuery.isLoading ? "계정을 불러오는 중..." : label}
             </span>
             <ChevronsUpDown className="ml-1 size-4 shrink-0 opacity-50" />
           </Button>
@@ -94,7 +94,7 @@ export function AccountMultiSelect({
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search accounts..."
+              placeholder="계정 검색..."
               className="h-7 text-xs"
               onClick={(event) => event.stopPropagation()}
               onKeyDown={(event) => event.stopPropagation()}
@@ -106,7 +106,7 @@ export function AccountMultiSelect({
             onCheckedChange={selectAll}
             onSelect={(event) => event.preventDefault()}
           >
-            All accounts
+            전체 계정
           </DropdownMenuCheckboxItem>
           <DropdownMenuSeparator />
           {filtered.map((account) => (
@@ -120,7 +120,7 @@ export function AccountMultiSelect({
             </DropdownMenuCheckboxItem>
           ))}
           {filtered.length === 0 ? (
-            <div className="px-2 py-1.5 text-xs text-muted-foreground">No accounts found</div>
+            <div className="px-2 py-1.5 text-xs text-muted-foreground">계정을 찾을 수 없습니다</div>
           ) : null}
         </DropdownMenuContent>
       </DropdownMenu>

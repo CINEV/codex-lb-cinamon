@@ -37,9 +37,9 @@ export function SettingsPage() {
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
           <Settings className="h-5 w-5 text-primary" />
-          Settings
+          설정
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">Configure routing, auth, API key management, and firewall.</p>
+        <p className="mt-1 text-sm text-muted-foreground">라우팅, 인증, API 키 관리, 방화벽을 설정합니다.</p>
       </div>
 
       {!settings ? (
@@ -73,7 +73,7 @@ export function SettingsPage() {
             <StickySessionsSection />
           </div>
 
-          <LoadingOverlay visible={!!settings && busy} label="Saving settings..." />
+          <LoadingOverlay visible={!!settings && busy} label="설정 저장 중..." />
         </>
       )}
     </div>

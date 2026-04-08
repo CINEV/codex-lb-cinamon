@@ -1,22 +1,22 @@
 import { RESET_ERROR_LABEL } from "@/utils/constants";
 
-const numberFormatter = new Intl.NumberFormat("en-US");
-const compactFormatter = new Intl.NumberFormat("en-US", {
+const numberFormatter = new Intl.NumberFormat("ko-KR");
+const compactFormatter = new Intl.NumberFormat("ko-KR", {
   notation: "compact",
   maximumFractionDigits: 2,
 });
-const currencyFormatter = new Intl.NumberFormat("en-US", {
+const currencyFormatter = new Intl.NumberFormat("ko-KR", {
   style: "currency",
   currency: "USD",
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
-const timeFormatter = new Intl.DateTimeFormat("en-US", {
+const timeFormatter = new Intl.DateTimeFormat("ko-KR", {
   hour: "2-digit",
   minute: "2-digit",
   second: "2-digit",
 });
-const dateFormatter = new Intl.DateTimeFormat("en-US", {
+const dateFormatter = new Intl.DateTimeFormat("ko-KR", {
   year: "numeric",
   month: "2-digit",
   day: "2-digit",
@@ -51,9 +51,9 @@ export function formatSlug(value: string): string {
 export function formatProviderLabel(value: string | null | undefined): string {
   switch (value) {
     case "chatgpt_web":
-      return "ChatGPT Web";
+      return "ChatGPT 웹";
     case "openai_platform":
-      return "OpenAI Platform";
+      return "OpenAI 플랫폼";
     default:
       return value ? formatSlug(value) : "";
   }
@@ -62,9 +62,9 @@ export function formatProviderLabel(value: string | null | undefined): string {
 export function formatRouteFamilyLabel(value: string): string {
   switch (value) {
     case "public_models_http":
-      return "Fallback HTTP /v1/models";
+      return "폴백 HTTP /v1/models";
     case "public_responses_http":
-      return "Fallback stateless HTTP /v1/responses";
+      return "폴백 상태 없는 HTTP /v1/responses";
     default:
       return formatSlug(value);
   }
@@ -170,17 +170,17 @@ export function formatTokensWithCached(totalTokens: unknown, cachedInputTokens: 
   if (cached === null || cached <= 0) {
     return formatCompactNumber(total);
   }
-  return `${formatCompactNumber(total)} (${formatCompactNumber(cached)} Cached)`;
+  return `${formatCompactNumber(total)} (${formatCompactNumber(cached)} 캐시됨)`;
 }
 
 export function formatCachedTokensMeta(totalTokens: unknown, cachedInputTokens: unknown): string {
   const total = toNumber(totalTokens);
   const cached = toNumber(cachedInputTokens);
   if (total === null || total <= 0 || cached === null || cached <= 0) {
-    return "Cached: --";
+    return "캐시: --";
   }
   const percent = Math.min(100, Math.max(0, (cached / total) * 100));
-  return `Cached: ${formatCompactNumber(cached)} (${Math.round(percent)}%)`;
+  return `캐시: ${formatCompactNumber(cached)} (${Math.round(percent)}%)`;
 }
 
 export function formatModelLabel(
@@ -212,36 +212,36 @@ export function formatTimeLong(iso: string | null | undefined): FormattedDateTim
 export function formatRelative(ms: number): string {
   const minutes = Math.ceil(ms / 60_000);
   if (minutes < 60) {
-    return `in ${minutes}m`;
+    return `${minutes}분 후`;
   }
   const hours = Math.ceil(minutes / 60);
   if (hours < 24) {
-    return `in ${hours}h`;
+    return `${hours}시간 후`;
   }
   const days = Math.ceil(hours / 24);
-  return `in ${days}d`;
+  return `${days}일 후`;
 }
 
 export function formatResetRelative(ms: number): string {
   if (ms <= 60_000) {
-    return "in 1m";
+    return "1분 후";
   }
 
   const totalMinutes = Math.floor(ms / 60_000);
   if (totalMinutes < 60) {
-    return `in ${totalMinutes}m`;
+    return `${totalMinutes}분 후`;
   }
 
   if (totalMinutes < 1440) {
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
-    return minutes > 0 ? `in ${hours}h ${minutes}m` : `in ${hours}h`;
+    return minutes > 0 ? `${hours}시간 ${minutes}분 후` : `${hours}시간 후`;
   }
 
   const totalHours = Math.floor(ms / 3_600_000);
   const days = Math.floor(totalHours / 24);
   const hours = totalHours % 24;
-  return hours > 0 ? `in ${days}d ${hours}h` : `in ${days}d`;
+  return hours > 0 ? `${days}일 ${hours}시간 후` : `${days}일 후`;
 }
 
 export function formatCountdown(seconds: number): string {
@@ -258,7 +258,7 @@ export function formatQuotaResetLabel(resetAt: string | null | undefined): strin
   }
   const diffMs = date.getTime() - Date.now();
   if (diffMs <= 0) {
-    return "now";
+    return "지금";
   }
   return formatResetRelative(diffMs);
 }
@@ -270,9 +270,9 @@ export function formatQuotaResetMeta(
   const labelSecondary = formatQuotaResetLabel(resetAtSecondary);
   const windowSecondary = formatWindowLabel("secondary", windowMinutesSecondary);
   if (labelSecondary === RESET_ERROR_LABEL) {
-    return "Quota reset unavailable";
+    return "할당량 리셋 정보를 확인할 수 없음";
   }
-  return `Quota reset (${windowSecondary}) · ${labelSecondary}`;
+  return `할당량 리셋 (${windowSecondary}) · ${labelSecondary}`;
 }
 
 export function truncateText(value: unknown, maxLen = 80): string {
@@ -292,36 +292,36 @@ export function truncateText(value: unknown, maxLen = 80): string {
 export function formatAccessTokenLabel(auth: AccountAuthStatus | null | undefined): string {
   const expiresAt = auth?.access?.expiresAt;
   if (!expiresAt) {
-    return "Missing";
+    return "없음";
   }
   const expiresDate = parseDate(expiresAt);
   if (!expiresDate) {
-    return "Unknown";
+    return "알 수 없음";
   }
   const diffMs = expiresDate.getTime() - Date.now();
   if (diffMs <= 0) {
-    return "Expired";
+    return "만료됨";
   }
-  return `Valid (${formatRelative(diffMs)})`;
+  return `유효 (${formatRelative(diffMs)})`;
 }
 
 export function formatRefreshTokenLabel(auth: AccountAuthStatus | null | undefined): string {
   const state = auth?.refresh?.state;
   const labelMap: Record<string, string> = {
-    stored: "Stored",
-    missing: "Missing",
-    expired: "Expired",
+    stored: "저장됨",
+    missing: "없음",
+    expired: "만료됨",
   };
-  return state && labelMap[state] ? labelMap[state] : "Unknown";
+  return state && labelMap[state] ? labelMap[state] : "알 수 없음";
 }
 
 export function formatIdTokenLabel(auth: AccountAuthStatus | null | undefined): string {
   const state = auth?.idToken?.state;
   const labelMap: Record<string, string> = {
-    parsed: "Parsed",
-    unknown: "Unknown",
+    parsed: "파싱됨",
+    unknown: "알 수 없음",
   };
-  return state && labelMap[state] ? labelMap[state] : "Unknown";
+  return state && labelMap[state] ? labelMap[state] : "알 수 없음";
 }
 
 export function toModels(value: string): string[] | undefined {

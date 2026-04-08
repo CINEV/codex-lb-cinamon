@@ -103,9 +103,9 @@ export function AccountsPage() {
     <div className="animate-fade-in-up space-y-6">
       {/* Page header */}
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Accounts</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">계정</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Manage imported accounts, ChatGPT authentication, and OpenAI Platform API keys.
+          가져온 계정, ChatGPT 인증, OpenAI Platform API 키를 관리합니다.
         </p>
       </div>
 
@@ -202,10 +202,10 @@ export function AccountsPage() {
 
       <ConfirmDialog
         open={deleteDialog.open}
-        title="Delete account"
-        description="This action removes the account from the load balancer configuration."
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
+        title="계정 삭제"
+        description="이 작업은 로드 밸런서 설정에서 계정을 제거합니다."
+        confirmLabel="삭제"
+        cancelLabel="취소"
         onOpenChange={deleteDialog.onOpenChange}
         onConfirm={() => {
           if (!deleteDialog.data) {
@@ -217,7 +217,7 @@ export function AccountsPage() {
         }}
       />
 
-      <LoadingOverlay visible={!!accountsQuery.data && mutationBusy} label="Updating accounts..." />
+      <LoadingOverlay visible={!!accountsQuery.data && mutationBusy} label="계정 업데이트 중..." />
     </div>
   );
 }

@@ -30,7 +30,7 @@ import type { DashboardSettings, SettingsUpdateRequest } from "@/features/settin
 import { getErrorMessage } from "@/utils/errors";
 
 const totpCodeSchema = z.object({
-  code: z.string().length(6, "Enter a 6-digit code"),
+  code: z.string().length(6, "6자리 코드를 입력하세요"),
 });
 
 type TotpCodeValues = z.infer<typeof totpCodeSchema>;
@@ -95,7 +95,7 @@ export function TotpSettings({ settings, disabled = false, onSave }: TotpSetting
       await confirmTotpSetup({ secret: setupSecret, code: values.code });
       await refreshSession();
       void queryClient.invalidateQueries({ queryKey: ["settings", "detail"] });
-      toast.success("TOTP configured");
+      toast.success("TOTP를 설정했습니다");
       closeDialog();
     } catch (caught) {
       setError(getErrorMessage(caught));
@@ -108,7 +108,7 @@ export function TotpSettings({ settings, disabled = false, onSave }: TotpSetting
       await disableTotp({ code: values.code });
       await refreshSession();
       void queryClient.invalidateQueries({ queryKey: ["settings", "detail"] });
-      toast.success("TOTP disabled");
+      toast.success("TOTP를 비활성화했습니다");
       closeDialog();
     } catch (caught) {
       setError(getErrorMessage(caught));
@@ -127,7 +127,7 @@ export function TotpSettings({ settings, disabled = false, onSave }: TotpSetting
             <div>
               <h3 className="text-sm font-semibold">TOTP</h3>
               <p className="text-xs text-muted-foreground">
-                {settings.totpConfigured ? "TOTP is configured." : "No TOTP configured."}
+                {settings.totpConfigured ? "TOTP가 설정되어 있습니다." : "설정된 TOTP가 없습니다."}
               </p>
             </div>
           </div>
@@ -142,7 +142,7 @@ export function TotpSettings({ settings, disabled = false, onSave }: TotpSetting
                 disabled={lock}
                 onClick={() => setActiveDialog("disable")}
               >
-                Disable
+                비활성화
               </Button>
             ) : (
               <Button
@@ -152,7 +152,7 @@ export function TotpSettings({ settings, disabled = false, onSave }: TotpSetting
                 disabled={lock}
                 onClick={handleOpenSetup}
               >
-                Enable TOTP
+                TOTP 활성화
               </Button>
             )}
           </div>
@@ -161,8 +161,8 @@ export function TotpSettings({ settings, disabled = false, onSave }: TotpSetting
         {/* Require on login toggle */}
         <div className="flex items-center justify-between rounded-lg border p-3">
           <div>
-            <p className="text-sm font-medium">Require TOTP on login</p>
-            <p className="text-xs text-muted-foreground">Prompt for TOTP code after password login.</p>
+            <p className="text-sm font-medium">로그인 시 TOTP 요구</p>
+            <p className="text-xs text-muted-foreground">비밀번호 로그인 뒤에 TOTP 코드를 요청합니다.</p>
           </div>
           <Switch
             checked={settings.totpRequiredOnLogin}
@@ -178,22 +178,22 @@ export function TotpSettings({ settings, disabled = false, onSave }: TotpSetting
       <Dialog open={activeDialog === "setup"} onOpenChange={(open) => !open && closeDialog()}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Enable TOTP</DialogTitle>
+            <DialogTitle>TOTP 활성화</DialogTitle>
             <DialogDescription>
-              Scan the QR code with your authenticator app, then enter the verification code.
+              인증 앱으로 QR 코드를 스캔한 뒤 확인 코드를 입력하세요.
             </DialogDescription>
           </DialogHeader>
           {error ? <AlertMessage variant="error">{error}</AlertMessage> : null}
 
           {setupQrDataUri ? (
             <div className="flex justify-center rounded-lg border bg-card p-4 dark:bg-white/95">
-              <img src={setupQrDataUri} alt="TOTP QR code" className="h-40 w-40" />
+              <img src={setupQrDataUri} alt="TOTP QR 코드" className="h-40 w-40" />
             </div>
           ) : null}
 
           {setupSecret ? (
             <p className="rounded-lg border bg-muted/30 px-3 py-2 font-mono text-xs">
-              Secret: {setupSecret}
+              비밀 키: {setupSecret}
             </p>
           ) : null}
 
@@ -205,7 +205,7 @@ export function TotpSettings({ settings, disabled = false, onSave }: TotpSetting
                   name="code"
                   render={({ field }) => (
                     <FormItem className="flex flex-col items-center gap-2">
-                      <FormLabel className="sr-only">Verification code</FormLabel>
+                      <FormLabel className="sr-only">확인 코드</FormLabel>
                       <FormControl>
                         <InputOTP
                           maxLength={6}
@@ -231,10 +231,10 @@ export function TotpSettings({ settings, disabled = false, onSave }: TotpSetting
                 />
                 <DialogFooter>
                   <Button type="button" variant="outline" onClick={closeDialog} disabled={prefetching}>
-                    Cancel
+                    취소
                   </Button>
                   <Button type="submit" disabled={lock}>
-                    Confirm setup
+                    설정 확인
                   </Button>
                 </DialogFooter>
               </form>
@@ -247,8 +247,8 @@ export function TotpSettings({ settings, disabled = false, onSave }: TotpSetting
       <Dialog open={activeDialog === "disable"} onOpenChange={(open) => !open && closeDialog()}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Disable TOTP</DialogTitle>
-            <DialogDescription>Enter your current TOTP code to disable two-factor authentication.</DialogDescription>
+            <DialogTitle>TOTP 비활성화</DialogTitle>
+            <DialogDescription>현재 TOTP 코드를 입력해 2단계 인증을 비활성화합니다.</DialogDescription>
           </DialogHeader>
           {error ? <AlertMessage variant="error">{error}</AlertMessage> : null}
           <Form {...disableForm}>
@@ -258,7 +258,7 @@ export function TotpSettings({ settings, disabled = false, onSave }: TotpSetting
                 name="code"
                 render={({ field }) => (
                   <FormItem className="flex flex-col items-center gap-2">
-                    <FormLabel className="sr-only">TOTP code</FormLabel>
+                    <FormLabel className="sr-only">TOTP 코드</FormLabel>
                     <FormControl>
                       <InputOTP
                         maxLength={6}
@@ -284,10 +284,10 @@ export function TotpSettings({ settings, disabled = false, onSave }: TotpSetting
               />
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={closeDialog} disabled={lock}>
-                  Cancel
+                  취소
                 </Button>
                 <Button type="submit" variant="destructive" disabled={lock}>
-                  Disable TOTP
+                  TOTP 비활성화
                 </Button>
               </DialogFooter>
             </form>

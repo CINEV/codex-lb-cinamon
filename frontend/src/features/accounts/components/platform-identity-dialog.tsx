@@ -131,19 +131,19 @@ export function PlatformIdentityDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit OpenAI Platform API key" : "Add OpenAI Platform API key"}</DialogTitle>
+          <DialogTitle>{isEdit ? "OpenAI Platform API 키 수정" : "OpenAI Platform API 키 추가"}</DialogTitle>
           <DialogDescription>
             {isEdit ? (
               <>
-                Update the fallback-only upstream identity for <code>/v1/models</code> and stateless HTTP{" "}
-                <code>/v1/responses</code>. ChatGPT accounts stay primary, and this key is used only when the
-                compatible ChatGPT pool is unhealthy under the primary or secondary drain thresholds.
+                <code>/v1/models</code>와 상태 없는 HTTP <code>/v1/responses</code>에만 쓰이는 폴백 전용 업스트림
+                ID를 수정합니다. ChatGPT 계정은 계속 기본 경로로 유지되고, 이 키는 기본 또는 보조 사용량 임계치 때문에
+                호환 가능한 ChatGPT 풀이 비정상일 때만 사용됩니다.
               </>
             ) : (
               <>
-                Register a fallback-only upstream identity for <code>/v1/models</code> and stateless HTTP{" "}
-                <code>/v1/responses</code>. ChatGPT accounts stay primary, and this key is used only when the
-                compatible ChatGPT pool is unhealthy under the primary or secondary drain thresholds.
+                <code>/v1/models</code>와 상태 없는 HTTP <code>/v1/responses</code>에만 쓰이는 폴백 전용 업스트림
+                ID를 등록합니다. ChatGPT 계정은 계속 기본 경로로 유지되고, 이 키는 기본 또는 보조 사용량 임계치 때문에
+                호환 가능한 ChatGPT 풀이 비정상일 때만 사용됩니다.
               </>
             )}
           </DialogDescription>
@@ -324,34 +324,34 @@ function PlatformIdentityDialogForm({
   return (
     <form className="space-y-4" onSubmit={handleSubmit}>
       <div className="space-y-2">
-        <Label htmlFor="platform-label">Label</Label>
+        <Label htmlFor="platform-label">레이블</Label>
         <Input
           id="platform-label"
-          placeholder="Production platform key"
+          placeholder="운영용 플랫폼 키"
           value={label}
           onChange={(event) => updateFormState("label", event.target.value)}
         />
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="platform-api-key">API key</Label>
+        <Label htmlFor="platform-api-key">API 키</Label>
         <Input
           id="platform-api-key"
           type="password"
-          placeholder={isEdit ? "Leave blank to keep the existing key" : "sk-..."}
+          placeholder={isEdit ? "비워두면 기존 키를 유지합니다" : "sk-..."}
           value={apiKey}
           onChange={(event) => updateFormState("apiKey", event.target.value)}
         />
         {isEdit ? (
           <p className="text-xs text-muted-foreground">
-            Leave blank to keep the current Platform API key. Enter a new key only when rotating credentials.
+            현재 Platform API 키를 유지하려면 비워두세요. 자격 증명을 교체할 때만 새 키를 입력하세요.
           </p>
         ) : null}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="platform-organization">Organization</Label>
+          <Label htmlFor="platform-organization">조직</Label>
           <Input
             id="platform-organization"
             placeholder="org_..."
@@ -360,7 +360,7 @@ function PlatformIdentityDialogForm({
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="platform-project">Project</Label>
+          <Label htmlFor="platform-project">프로젝트</Label>
           <Input
             id="platform-project"
             placeholder="proj_..."
@@ -371,7 +371,7 @@ function PlatformIdentityDialogForm({
       </div>
 
       <div className="space-y-2">
-        <Label>Eligible routes</Label>
+        <Label>허용 라우트</Label>
         <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
           {PLATFORM_ROUTE_OPTIONS.map((option) => (
             <label key={option.value} className="flex items-start gap-3 rounded-md px-1 py-1.5">
@@ -384,7 +384,7 @@ function PlatformIdentityDialogForm({
                 <span className="block text-xs text-muted-foreground">
                   {option.description}
                   {option.value === "public_responses_http"
-                    ? " Stateless HTTP only; compact, chat completions, websocket, and continuity-bound requests stay on ChatGPT."
+                    ? " 상태 없는 HTTP 전용이며, compact, chat completions, websocket, 연속성 의존 요청은 계속 ChatGPT로 보냅니다."
                     : ""}
                 </span>
               </span>
@@ -393,19 +393,17 @@ function PlatformIdentityDialogForm({
         </div>
         <p className="text-xs text-muted-foreground">
           {eligibleRouteFamilies.length === 0
-            ? "No route families enabled. This identity stays unroutable until you opt into one."
-            : `Enabled for ${eligibleRouteFamilies.length} route ${
-                eligibleRouteFamilies.length === 1 ? "family" : "families"
-              }.`}
+            ? "허용된 라우트 패밀리가 없습니다. 하나 이상 선택하기 전까지 이 ID는 라우팅되지 않습니다."
+            : `${eligibleRouteFamilies.length}개의 라우트 패밀리에서 사용할 수 있습니다.`}
         </p>
         <p className="text-xs text-muted-foreground">
           {isEdit
-            ? "Only /v1/models and stateless HTTP /v1/responses can ever use this key. ChatGPT-only, compact, websocket, and continuity-bound requests stay on ChatGPT."
-            : "Requires an existing ChatGPT account that is not paused or deactivated. Only one Platform API key can be registered, and it is used only for /v1/models plus stateless HTTP /v1/responses fallback."}
+            ? "이 키는 /v1/models와 상태 없는 HTTP /v1/responses에서만 사용할 수 있습니다. ChatGPT 전용, compact, websocket, 연속성 의존 요청은 계속 ChatGPT에 남습니다."
+            : "일시 중지되거나 비활성화되지 않은 기존 ChatGPT 계정이 필요합니다. Platform API 키는 하나만 등록할 수 있으며, /v1/models와 상태 없는 HTTP /v1/responses 폴백에만 사용됩니다."}
         </p>
         {!isEdit && !prerequisiteSatisfied ? (
           <p className="text-xs text-destructive">
-            Add or reactivate a ChatGPT account first. Platform keys cannot be used on their own.
+            먼저 ChatGPT 계정을 추가하거나 다시 활성화하세요. Platform 키는 단독으로 사용할 수 없습니다.
           </p>
         ) : null}
       </div>
@@ -418,7 +416,7 @@ function PlatformIdentityDialogForm({
 
       <DialogFooter>
         <Button type="submit" disabled={busy || !canSubmit}>
-          {isEdit ? "Save changes" : "Add API key"}
+          {isEdit ? "변경 사항 저장" : "API 키 추가"}
         </Button>
       </DialogFooter>
     </form>

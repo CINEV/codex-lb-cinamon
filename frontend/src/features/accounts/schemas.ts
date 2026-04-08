@@ -102,8 +102,8 @@ export const AccountImportResponseSchema = z.object({
 });
 
 export const PlatformIdentityCreateRequestSchema = z.object({
-  label: z.string().trim().min(1, "Label is required"),
-  apiKey: z.string().trim().min(1, "API key is required"),
+  label: z.string().trim().min(1, "레이블은 필수입니다"),
+  apiKey: z.string().trim().min(1, "API 키는 필수입니다"),
   organization: OptionalTrimmedStringSchema,
   project: OptionalTrimmedStringSchema,
   eligibleRouteFamilies: z.array(PlatformRouteFamilySchema).default([]),
@@ -124,8 +124,8 @@ const OptionalNullableTrimmedStringSchema = z
   });
 
 export const PlatformIdentityUpdateRequestSchema = z.object({
-  label: z.string().trim().min(1, "Label is required").optional(),
-  apiKey: z.string().trim().min(1, "API key is required").optional(),
+  label: z.string().trim().min(1, "레이블은 필수입니다").optional(),
+  apiKey: z.string().trim().min(1, "API 키는 필수입니다").optional(),
   organization: OptionalNullableTrimmedStringSchema,
   project: OptionalNullableTrimmedStringSchema,
   eligibleRouteFamilies: z.array(PlatformRouteFamilySchema).optional(),

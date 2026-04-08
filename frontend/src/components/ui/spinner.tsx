@@ -21,7 +21,7 @@ type SpinnerBlockProps = {
   className?: string;
 };
 
-export function SpinnerBlock({ label = "Loading...", className }: SpinnerBlockProps) {
+export function SpinnerBlock({ label = "불러오는 중...", className }: SpinnerBlockProps) {
   return (
     <div role="status" className={cn("flex flex-col items-center gap-3", className)}>
       <Spinner />

@@ -71,7 +71,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       return applySession(set, session);
     } catch (error) {
       set({
-        error: error instanceof Error ? error.message : "Login failed",
+        error: error instanceof Error ? error.message : "로그인에 실패했습니다",
       });
       throw error;
     } finally {

@@ -115,7 +115,7 @@ export function AccountCard({ account, showAccountId = false, onAction }: Accoun
 
       {isPlatformIdentity ? (
         <div className="mt-3.5 rounded-lg border border-dashed bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-          Fallback only for `/v1/models` and stateless HTTP `/v1/responses`.
+          `/v1/models`와 상태 없는 HTTP `/v1/responses`에만 폴백으로 사용됩니다.
         </div>
       ) : (
         <div className={cn("mt-3.5 grid gap-3", weeklyOnly ? "grid-cols-1" : "grid-cols-2")}>
@@ -134,7 +134,7 @@ export function AccountCard({ account, showAccountId = false, onAction }: Accoun
           onClick={() => onAction?.(account, "details")}
         >
           <ExternalLink className="h-3 w-3" />
-          Details
+          상세
         </Button>
         {status === "paused" && (
           <Button
@@ -145,7 +145,7 @@ export function AccountCard({ account, showAccountId = false, onAction }: Accoun
             onClick={() => onAction?.(account, "resume")}
           >
             <Play className="h-3 w-3" />
-            Resume
+            재개
           </Button>
         )}
         {status === "deactivated" && !isPlatformIdentity && (
@@ -157,7 +157,7 @@ export function AccountCard({ account, showAccountId = false, onAction }: Accoun
             onClick={() => onAction?.(account, "reauth")}
           >
             <RotateCcw className="h-3 w-3" />
-            Re-auth
+            재인증
           </Button>
         )}
       </div>

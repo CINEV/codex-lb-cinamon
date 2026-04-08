@@ -22,7 +22,7 @@ import { getErrorMessageOrNull } from "@/utils/errors";
 import { formatTimeLong } from "@/utils/formatters";
 
 function modeLabel(mode: "allow_all" | "allowlist_active"): string {
-  return mode === "allow_all" ? "Allow all" : "Allowlist active";
+  return mode === "allow_all" ? "전체 허용" : "허용 목록 활성";
 }
 
 export function FirewallSection() {
@@ -58,8 +58,8 @@ export function FirewallSection() {
           <Shield className="h-4 w-4 text-primary" aria-hidden="true" />
         </div>
         <div>
-          <h3 className="text-sm font-semibold">Firewall</h3>
-          <p className="text-xs text-muted-foreground">Restrict proxy APIs to allowed client IPs.</p>
+          <h3 className="text-sm font-semibold">방화벽</h3>
+          <p className="text-xs text-muted-foreground">허용된 클라이언트 IP로만 프록시 API를 제한합니다.</p>
         </div>
       </div>
 
@@ -67,12 +67,12 @@ export function FirewallSection() {
 
       <div className="flex items-center gap-3 rounded-lg border px-3 py-2">
         <div className="flex items-center gap-1.5">
-          <span className="text-xs text-muted-foreground">Mode</span>
+          <span className="text-xs text-muted-foreground">모드</span>
           <Badge variant="outline">{modeLabel(mode)}</Badge>
         </div>
         <div className="h-4 w-px bg-border" />
         <div className="flex items-center gap-1.5">
-          <span className="text-xs text-muted-foreground">Allowed IPs</span>
+          <span className="text-xs text-muted-foreground">허용된 IP</span>
           <span className="text-sm font-medium tabular-nums">{entries.length}</span>
         </div>
       </div>
@@ -97,7 +97,7 @@ export function FirewallSection() {
           onClick={() => void handleAdd()}
           disabled={busy || !ipAddress.trim()}
         >
-          Add IP
+          IP 추가
         </Button>
       </div>
 
@@ -108,17 +108,17 @@ export function FirewallSection() {
       ) : entries.length === 0 ? (
         <EmptyState
           icon={Shield}
-          title="No IPs on the allowlist"
-          description="Firewall is currently in allow-all mode."
+          title="허용 목록에 등록된 IP가 없습니다"
+          description="현재 방화벽은 전체 허용 모드입니다."
         />
       ) : (
         <div className="overflow-x-auto rounded-xl border">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>IP Address</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead className="w-[96px] text-right">Actions</TableHead>
+                <TableHead>IP 주소</TableHead>
+                <TableHead>생성 시각</TableHead>
+                <TableHead className="w-[96px] text-right">작업</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -139,7 +139,7 @@ export function FirewallSection() {
                         disabled={busy}
                         onClick={() => deleteDialog.show(entry.ipAddress)}
                       >
-                        Remove
+                        제거
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -152,9 +152,9 @@ export function FirewallSection() {
 
       <ConfirmDialog
         open={deleteDialog.open}
-        title="Remove IP from allowlist"
-        description={`${deleteDialog.data ?? ""} will no longer be allowed through the firewall.`}
-        confirmLabel="Remove"
+        title="허용 목록에서 IP 제거"
+        description={`${deleteDialog.data ?? ""} 는 더 이상 방화벽을 통과할 수 없습니다.`}
+        confirmLabel="제거"
         onOpenChange={deleteDialog.onOpenChange}
         onConfirm={() => {
           if (!deleteDialog.data) {

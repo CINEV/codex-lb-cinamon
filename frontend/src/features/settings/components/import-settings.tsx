@@ -23,17 +23,17 @@ export function ImportSettings({ settings, busy, onSave }: ImportSettingsProps) 
               <Upload className="h-4 w-4 text-primary" aria-hidden="true" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold">Import</h3>
-              <p className="text-xs text-muted-foreground">Control how account import handles duplicates.</p>
+              <h3 className="text-sm font-semibold">가져오기</h3>
+              <p className="text-xs text-muted-foreground">계정 가져오기 시 중복 처리 방식을 설정합니다.</p>
             </div>
           </div>
         </div>
 
         <div className="flex items-center justify-between rounded-lg border p-3">
           <div>
-            <p className="text-sm font-medium">Allow import without overwrite</p>
+            <p className="text-sm font-medium">덮어쓰기 없이 가져오기 허용</p>
             <p className="text-xs text-muted-foreground">
-              Keep duplicate imports as separate accounts instead of replacing existing ones.
+              중복된 가져오기를 기존 계정을 대체하지 않고 별도 계정으로 유지합니다.
             </p>
           </div>
           <Switch

@@ -63,16 +63,16 @@ export function WindowsOauthHelp() {
   return (
     <div className="space-y-3 rounded-xl border bg-card p-4">
       <div>
-        <h2 className="text-sm font-semibold">Windows OAuth Help</h2>
+        <h2 className="text-sm font-semibold">Windows OAuth 도움말</h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          If browser login fails on Windows, create a local port-forward so OAuth callbacks on
+          Windows에서 브라우저 로그인이 실패하면, OAuth 콜백이
           <code className="mx-1 rounded bg-muted px-1 py-0.5">localhost:1455</code>
-          reach this server.
+          에서 이 서버로 도달하도록 로컬 포트 포워딩을 만드세요.
         </p>
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Runtime detected connect address:
+        런타임이 감지한 연결 주소:
         <code className="ml-1 rounded bg-muted px-1 py-0.5">{connectAddress}</code>
       </p>
 
@@ -81,8 +81,8 @@ export function WindowsOauthHelp() {
       </pre>
 
       <div className="flex flex-wrap items-center gap-2">
-        <CopyButton value={commands} label="Copy commands" />
-        <span className="text-xs text-muted-foreground">Run in PowerShell as Administrator.</span>
+        <CopyButton value={commands} label="명령어 복사" />
+        <span className="text-xs text-muted-foreground">PowerShell을 관리자 권한으로 실행하세요.</span>
       </div>
     </div>
   );
