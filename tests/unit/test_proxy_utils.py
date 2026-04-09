@@ -200,6 +200,26 @@ async def test_ring_raises_on_db_error() -> None:
         )
 
 
+@pytest.mark.anyio
+async def test_active_http_bridge_instance_ring_uses_static_ring_for_sqlite_single_instance() -> None:
+    settings = SimpleNamespace(
+        database_url="sqlite+aiosqlite:///./store.db",
+        http_responses_session_bridge_enabled=True,
+        http_responses_session_bridge_instance_id="pod-a",
+        http_responses_session_bridge_instance_ring=[],
+    )
+    ring_membership = AsyncMock()
+
+    instance_id, ring = await proxy_service._active_http_bridge_instance_ring(
+        settings,
+        cast(proxy_service.RingMembershipService, ring_membership),
+    )
+
+    assert instance_id == "pod-a"
+    assert ring == ("pod-a",)
+    ring_membership.list_active.assert_not_called()
+
+
 def test_build_upstream_websocket_headers_strip_accept_and_content_type_case_insensitively():
     headers = proxy_module._build_upstream_websocket_headers(
         {

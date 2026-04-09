@@ -153,6 +153,8 @@ class Settings(BaseSettings):
     deterministic_failover_enabled: bool = True
     drain_primary_threshold_pct: float = 85.0
     drain_secondary_threshold_pct: float = 90.0
+    platform_fallback_primary_remaining_threshold_pct: float = 10.0
+    platform_fallback_secondary_remaining_threshold_pct: float = 5.0
     drain_error_window_seconds: float = 60.0
     drain_error_count_threshold: int = 2
     probe_quiet_seconds: float = 60.0

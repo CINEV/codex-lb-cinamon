@@ -124,7 +124,7 @@ from app.modules.proxy.request_policy import (
     openai_validation_error,
     validate_model_access,
 )
-from app.modules.proxy.ring_membership import RingMembershipService
+from app.modules.proxy.ring_membership import RingMembershipService, dynamic_bridge_ring_membership_enabled
 from app.modules.proxy.types import (
     AdditionalRateLimitData,
     RateLimitStatusDetailsData,
@@ -132,6 +132,7 @@ from app.modules.proxy.types import (
     RateLimitWindowSnapshotData,
 )
 from app.modules.upstream_identities.types import (
+    BACKEND_CODEX_HTTP_ROUTE_FAMILY,
     CHATGPT_WEB_PROVIDER_KIND,
     OPENAI_PLATFORM_PROVIDER_KIND,
     OPENAI_PUBLIC_HTTP_ROUTE_CLASS,
@@ -258,11 +259,14 @@ class ProxyService:
         self._repo_factory = repo_factory
         self._encryptor = TokenEncryptor()
         self._load_balancer = LoadBalancer(repo_factory)
+        settings = get_settings()
         self._provider_adapters: dict[str, ProviderAdapter] = {
             CHATGPT_WEB_PROVIDER_KIND: ChatGPTWebProviderAdapter(repo_factory),
             OPENAI_PLATFORM_PROVIDER_KIND: OpenAIPlatformProviderAdapter(),
         }
-        self._ring_membership = RingMembershipService(SessionLocal)
+        self._ring_membership = (
+            RingMembershipService(SessionLocal) if dynamic_bridge_ring_membership_enabled(settings) else None
+        )
         self._http_bridge_sessions: dict[_HTTPBridgeSessionKey, _HTTPBridgeSession] = {}
         self._http_bridge_inflight_sessions: dict[_HTTPBridgeSessionKey, asyncio.Future[_HTTPBridgeSession]] = {}
         self._http_bridge_turn_state_index: dict[tuple[str, str | None], _HTTPBridgeSessionKey] = {}
@@ -354,8 +358,12 @@ class ProxyService:
             self._provider_adapter(OPENAI_PLATFORM_PROVIDER_KIND),
         )
 
-        if capabilities.route_family == PUBLIC_MODELS_HTTP_ROUTE_FAMILY:
-            identity = await self.select_platform_identity(PUBLIC_MODELS_HTTP_ROUTE_FAMILY)
+        is_models_route = capabilities.route_family == PUBLIC_MODELS_HTTP_ROUTE_FAMILY or (
+            capabilities.route_family == BACKEND_CODEX_HTTP_ROUTE_FAMILY and capabilities.model is None
+        )
+
+        if is_models_route:
+            identity = await self.select_platform_identity(capabilities.route_family)  # type: ignore[arg-type]
             if has_chatgpt:
                 should_fallback = await self.should_fallback_to_platform_for_usage_drain(
                     model=None,
@@ -404,7 +412,7 @@ class ProxyService:
                         routing_subject_id="chatgpt_web_pool",
                     )
                 )
-            identity = await self.select_platform_identity(PUBLIC_RESPONSES_HTTP_ROUTE_FAMILY)
+            identity = await self.select_platform_identity(capabilities.route_family)  # type: ignore[arg-type]
             if identity is None:
                 return ProviderSelectionResult()
             decision = platform_adapter.check_capabilities(
@@ -422,7 +430,7 @@ class ProxyService:
                         routing_subject_id="chatgpt_web_pool",
                     )
                 )
-            identity = await self.select_platform_identity(PUBLIC_RESPONSES_HTTP_ROUTE_FAMILY)
+            identity = await self.select_platform_identity(capabilities.route_family)  # type: ignore[arg-type]
             if identity is None:
                 return ProviderSelectionResult()
             decision = platform_adapter.check_capabilities(
@@ -431,7 +439,7 @@ class ProxyService:
             )
             return self._provider_selection_failure(decision, capabilities)
 
-        identity = await self.select_platform_identity(PUBLIC_RESPONSES_HTTP_ROUTE_FAMILY)
+        identity = await self.select_platform_identity(capabilities.route_family)  # type: ignore[arg-type]
         if has_chatgpt:
             should_fallback = await self.should_fallback_to_platform_for_usage_drain(
                 model=capabilities.model,
@@ -509,9 +517,11 @@ class ProxyService:
         api_key: ApiKeyData | None,
         *,
         identity: _SelectedPlatformIdentity | None = None,
+        route_family: str = PUBLIC_MODELS_HTTP_ROUTE_FAMILY,
+        route_class: str = OPENAI_PUBLIC_HTTP_ROUTE_CLASS,
     ) -> PlatformModelsResponse | None:
         if identity is None:
-            identity = await self.select_platform_identity(PUBLIC_MODELS_HTTP_ROUTE_FAMILY)
+            identity = await self.select_platform_identity(route_family)  # type: ignore[arg-type]
         if identity is None:
             return None
         adapter = cast(OpenAIPlatformProviderAdapter, self._provider_adapter(OPENAI_PLATFORM_PROVIDER_KIND))
@@ -533,7 +543,7 @@ class ProxyService:
                 status="error",
                 error_code=_platform_error_code(exc.payload),
                 error_message=_platform_error_message(exc.payload),
-                route_class=OPENAI_PUBLIC_HTTP_ROUTE_CLASS,
+                route_class=route_class,
                 rejection_reason="platform_models_request_failed",
                 transport=_REQUEST_TRANSPORT_HTTP,
             )
@@ -547,7 +557,7 @@ class ProxyService:
             model="",
             latency_ms=int((time.monotonic() - start) * 1000),
             status="success",
-            route_class=OPENAI_PUBLIC_HTTP_ROUTE_CLASS,
+            route_class=route_class,
             upstream_request_id=result.upstream_request_id,
             transport=_REQUEST_TRANSPORT_HTTP,
         )
@@ -562,9 +572,10 @@ class ProxyService:
         payload: ResponsesRequest,
         api_key: ApiKeyData | None,
         identity: _SelectedPlatformIdentity | None = None,
+        route_family: str = PUBLIC_RESPONSES_HTTP_ROUTE_FAMILY,
     ) -> tuple[_SelectedPlatformIdentity | None, PlatformStreamResponse | None]:
         if identity is None:
-            identity = await self.select_platform_identity(PUBLIC_RESPONSES_HTTP_ROUTE_FAMILY)
+            identity = await self.select_platform_identity(route_family)  # type: ignore[arg-type]
         if identity is None:
             return None, None
         adapter = cast(OpenAIPlatformProviderAdapter, self._provider_adapter(OPENAI_PLATFORM_PROVIDER_KIND))
@@ -588,9 +599,10 @@ class ProxyService:
         payload: ResponsesRequest,
         api_key: ApiKeyData | None,
         identity: _SelectedPlatformIdentity | None = None,
+        route_family: str = PUBLIC_RESPONSES_HTTP_ROUTE_FAMILY,
     ) -> tuple[_SelectedPlatformIdentity | None, PlatformResponseResult | None]:
         if identity is None:
-            identity = await self.select_platform_identity(PUBLIC_RESPONSES_HTTP_ROUTE_FAMILY)
+            identity = await self.select_platform_identity(route_family)  # type: ignore[arg-type]
         if identity is None:
             return None, None
         adapter = cast(OpenAIPlatformProviderAdapter, self._provider_adapter(OPENAI_PLATFORM_PROVIDER_KIND))
@@ -5904,6 +5916,8 @@ async def _active_http_bridge_instance_ring(
     ring_membership: RingMembershipService | None,
 ) -> tuple[str, tuple[str, ...]]:
     instance_id, static_ring = _normalized_http_bridge_instance_ring(settings)
+    if not dynamic_bridge_ring_membership_enabled(settings):
+        return instance_id, static_ring
     if ring_membership is None:
         return instance_id, static_ring
     try:
