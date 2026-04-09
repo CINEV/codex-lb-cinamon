@@ -4,20 +4,19 @@ description: >-
   Production-grade Helm chart for codex-lb — OpenAI API load balancer with usage
   tracking, account pooling, and observability
 type: application
-version: 1.12.2
-appVersion: 1.12.2
+version: 1.12.3
+appVersion: 1.12.3
 kubeVersion: '>=1.32.0-0'
-home: https://github.com/soju06/codex-lb
+home: https://github.com/CINEV/codex-lb-cinamon
 sources:
-  - https://github.com/soju06/codex-lb
+  - https://github.com/CINEV/codex-lb-cinamon
 keywords:
   - load-balancer
   - openai
   - proxy
   - codex
 maintainers:
-  - name: Soju06
-    email: qlskssk@gmail.com
+  - name: CINEV
 dependencies:
   - name: postgresql
     version: 18.5.14

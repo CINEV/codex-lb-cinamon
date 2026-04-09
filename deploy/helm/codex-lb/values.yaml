@@ -28,7 +28,7 @@ image:
   # @param image.registry Container image registry
   registry: ghcr.io
   # @param image.repository Container image repository
-  repository: soju06/codex-lb
+  repository: cinev/codex-lb-cinamon
   # @param image.tag Container image tag (defaults to appVersion)
   tag: ""
   # @param image.digest Container image digest (overrides tag when set)

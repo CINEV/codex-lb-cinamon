@@ -26,6 +26,23 @@ Resources
 
 ## 빠른 시작
 
+PyPI로 설치:
+
+```bash
+python3.13 -m venv .venv
+source .venv/bin/activate
+pip install codex-lb-cinamon
+codex-lb-cinamon
+```
+
+DB 마이그레이션을 수동으로 실행해야 하면:
+
+```bash
+codex-lb-cinamon-db upgrade head
+```
+
+브라우저에서 [http://localhost:2455](http://localhost:2455) 로 접속한 뒤 계정을 추가하면 바로 사용할 수 있습니다.
+
 컨테이너 실행:
 
 ```bash
@@ -36,7 +53,7 @@ docker run -d --name codex-lb-cinamon \
   -e CODEX_LB_HTTP_RESPONSES_SESSION_BRIDGE_INSTANCE_ID=codex-lb-cinamon-local \
   -e CODEX_LB_INSECURE_ALLOW_REMOTE_NO_AUTH=true \
   -e CODEX_LB_INSECURE_ALLOW_REMOTE_NO_AUTH_HOST_CIDRS=172.17.0.0/16 \
-  ghcr.io/kgskr/codex-lb:latest
+  ghcr.io/cinev/codex-lb-cinamon:latest
 ```
 
 또는 로컬 실행:
@@ -44,8 +61,6 @@ docker run -d --name codex-lb-cinamon \
 ```bash
 uvx codex-lb-cinamon
 ```
-
-브라우저에서 [http://localhost:2455](http://localhost:2455) 로 접속한 뒤 계정을 추가하면 바로 사용할 수 있습니다.
 
 컨테이너로 실행할 때는 아래 설정을 함께 주는 것을 권장합니다.
 
@@ -280,7 +295,7 @@ API 키는 `Dashboard -> API Keys -> Create` 에서 발급합니다. 전체 키 
 이미지 주소:
 
 ```text
-ghcr.io/kgskr/codex-lb
+ghcr.io/cinev/codex-lb-cinamon
 ```
 
 ## 개발
