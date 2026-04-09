@@ -130,25 +130,35 @@ def start_background_server(
     resolved_pid_file.parent.mkdir(parents=True, exist_ok=True)
     resolved_log_file.parent.mkdir(parents=True, exist_ok=True)
 
-    creationflags = 0
-    popen_kwargs: dict[str, object] = {"cwd": os.getcwd()}
+    env = dict(os.environ)
+    env["PYTHONUNBUFFERED"] = "1"
+
     if os.name == "nt":
         creationflags = (
             getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)
         )
-        popen_kwargs["creationflags"] = creationflags
-    else:
-        popen_kwargs["start_new_session"] = True
 
     with resolved_log_file.open("ab") as log_handle:
-        process = subprocess.Popen(
-            build_serve_command(sys.executable, options),
-            stdin=subprocess.DEVNULL,
-            stdout=log_handle,
-            stderr=subprocess.STDOUT,
-            env={**os.environ, "PYTHONUNBUFFERED": "1"},
-            **popen_kwargs,
-        )
+        if os.name == "nt":
+            process = subprocess.Popen(
+                build_serve_command(sys.executable, options),
+                stdin=subprocess.DEVNULL,
+                stdout=log_handle,
+                stderr=subprocess.STDOUT,
+                cwd=os.getcwd(),
+                env=env,
+                creationflags=creationflags,
+            )
+        else:
+            process = subprocess.Popen(
+                build_serve_command(sys.executable, options),
+                stdin=subprocess.DEVNULL,
+                stdout=log_handle,
+                stderr=subprocess.STDOUT,
+                cwd=os.getcwd(),
+                env=env,
+                start_new_session=True,
+            )
 
     metadata = RuntimeMetadata(
         pid=process.pid,
