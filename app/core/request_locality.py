@@ -196,16 +196,17 @@ def _read_interface_ipv4_network(interface: str) -> IPv4Network | None:
 
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             address_bytes = fcntl.ioctl(sock.fileno(), 0x8915, ifreq)[20:24]
-            netmask_bytes = fcntl.ioctl(sock.fileno(), 0x891b, ifreq)[20:24]
+            netmask_bytes = fcntl.ioctl(sock.fileno(), 0x891B, ifreq)[20:24]
     except (ImportError, OSError):
         return None
 
     address = socket.inet_ntoa(address_bytes)
     netmask = socket.inet_ntoa(netmask_bytes)
     try:
-        return ip_network(f"{address}/{netmask}", strict=False)
+        network = ip_network(f"{address}/{netmask}", strict=False)
     except ValueError:
         return None
+    return network if isinstance(network, IPv4Network) else None
 
 
 @lru_cache(maxsize=1)
