@@ -1,15 +1,11 @@
 [project]
 name = "codex-lb-cinamon"
-version = "1.12.2"
+version = "1.12.3"
 description = "Codex load balancer and proxy for ChatGPT accounts with usage dashboard"
 readme = "README.md"
 license = { file = "LICENSE" }
-authors = [{ name = "Soju06", email = "qlskssk@gmail.com" }]
-maintainers = [
-    { name = "Soju06", email = "qlskssk@gmail.com" },
-    { name = "choi138", email = "kidjustinchoi@gmail.com" },
-    { name = "aaiyer", email = "aaiyer0@proton.me" },
-]
+authors = [{ name = "CINEV" }]
+maintainers = [{ name = "CINEV" }]
 keywords = [
     "codex",
     "load-balancer",
@@ -66,6 +62,10 @@ tracing = [
     "opentelemetry-instrumentation-aiohttp-client>=0.46",
     "opentelemetry-instrumentation-sqlalchemy>=0.46",
 ]
+
+[project.urls]
+Homepage = "https://github.com/CINEV/codex-lb-cinamon"
+Repository = "https://github.com/CINEV/codex-lb-cinamon"
 
 [dependency-groups]
 dev = [

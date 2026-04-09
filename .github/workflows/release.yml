@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag (e.g. v1.12.2 or v1.12.2-platform)"
+        description: "Release tag (e.g. v1.12.3 or v1.12.3-platform)"
         required: true
 
 concurrency:
@@ -17,13 +17,12 @@ env:
   RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
 
 jobs:
-  docker-image:
-    name: Build and push Docker image
+  build:
+    name: Build (sdist + wheel)
     runs-on: ubuntu-24.04
 
     permissions:
       contents: read
-      packages: write
 
     steps:
       - name: Checkout repository
@@ -31,6 +30,23 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ env.RELEASE_TAG }}
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.10"
+
+      - name: Install frontend dependencies
+        run: cd frontend && bun install --frozen-lockfile
+
+      - name: Build frontend assets
+        run: cd frontend && bun run build
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.0.0
+        with:
+          python-version: "3.13"
+          enable-cache: true
 
       - name: Verify tag matches project version
         shell: bash
@@ -66,6 +82,91 @@ jobs:
 
           print(f"OK: {tag} matches pyproject.toml version {project_version}")
           PY
+
+      - name: Build sdist + wheel
+        run: uv build --no-sources
+
+      - name: Verify wheel contains frontend assets
+        shell: bash
+        run: |
+          python - <<'PY'
+          import glob
+          import zipfile
+
+          wheels = glob.glob("dist/*.whl")
+          if not wheels:
+              raise SystemExit("no wheel found in dist/")
+
+          wheel = wheels[0]
+          with zipfile.ZipFile(wheel) as zf:
+              names = set(zf.namelist())
+              has_index = "app/static/index.html" in names
+              has_js = any(
+                  name.startswith("app/static/assets/") and name.endswith(".js")
+                  for name in names
+              )
+              has_css = any(
+                  name.startswith("app/static/assets/") and name.endswith(".css")
+                  for name in names
+              )
+
+          if not (has_index and has_js and has_css):
+              raise SystemExit(
+                  f"frontend assets missing in wheel: index={has_index} js={has_js} css={has_css}"
+              )
+          print(f"frontend assets verified in wheel: {wheel}")
+          PY
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+
+  publish-to-pypi:
+    name: Publish to PyPI
+    if: ${{ !contains(env.RELEASE_TAG, '-') }}
+    needs: [build]
+    runs-on: ubuntu-24.04
+
+    permissions:
+      id-token: write
+
+    environment:
+      name: pypi
+      url: https://pypi.org/project/codex-lb-cinamon/
+
+    steps:
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: List dist files
+        run: ls -la dist/
+
+      - name: Publish to PyPI (Trusted Publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          verbose: true
+          print-hash: true
+
+  docker-image:
+    name: Build and push Docker image
+    needs: [build]
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4

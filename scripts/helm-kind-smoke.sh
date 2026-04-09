@@ -7,7 +7,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHART_DIR="${ROOT_DIR}/deploy/helm/codex-lb"
 KUBE_CONTEXT="${KUBE_CONTEXT:-kind-codex-lb-smoke}"
 IMAGE_REGISTRY="${IMAGE_REGISTRY:-ghcr.io}"
-IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-soju06/codex-lb}"
+IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-cinev/codex-lb-cinamon}"
 IMAGE_TAG="${IMAGE_TAG:-ci}"
 DB_PASSWORD="${DB_PASSWORD:-smoke-password}"
 

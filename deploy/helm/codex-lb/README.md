@@ -8,7 +8,7 @@
 docker run -d --name codex-lb \
   -p 2455:2455 -p 1455:1455 \
   -v codex-lb-data:/var/lib/codex-lb \
-  ghcr.io/kgskr/codex-lb:latest
+  ghcr.io/cinev/codex-lb-cinamon:latest
 ```
 
 필요한 정보는 최상위 `README.md`를 기준으로 확인하면 됩니다.
