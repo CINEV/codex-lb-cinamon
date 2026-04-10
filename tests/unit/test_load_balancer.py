@@ -487,6 +487,80 @@ async def test_should_fallback_to_platform_for_usage_drain_returns_true_when_all
 
 
 @pytest.mark.asyncio
+async def test_should_fallback_to_platform_for_usage_drain_returns_true_when_remaining_candidate_has_no_usage():
+    balancer = LoadBalancer(lambda: None)
+    accounts = [_make_test_account("a"), _make_test_account("b")]
+    selection_inputs = SelectionInputs(
+        accounts=accounts,
+        latest_primary={
+            "a": _make_test_usage("a", window="primary", used_percent=95.0),
+        },
+        latest_secondary={
+            "a": _make_test_usage("a", window="secondary", used_percent=95.0),
+        },
+    )
+
+    async def fake_load_selection_inputs(*, model=None, additional_limit_name=None, account_ids=None):
+        del model, additional_limit_name, account_ids
+        return selection_inputs
+
+    balancer._load_selection_inputs = fake_load_selection_inputs  # type: ignore[method-assign]
+
+    should_fallback = await balancer.should_fallback_to_platform_for_usage_drain(model="gpt-5.1")
+
+    assert should_fallback is True
+
+
+@pytest.mark.asyncio
+async def test_should_fallback_to_platform_for_usage_drain_returns_true_when_remaining_candidate_has_partial_usage():
+    balancer = LoadBalancer(lambda: None)
+    accounts = [_make_test_account("a"), _make_test_account("b")]
+    selection_inputs = SelectionInputs(
+        accounts=accounts,
+        latest_primary={
+            "a": _make_test_usage("a", window="primary", used_percent=95.0),
+            "b": _make_test_usage("b", window="primary", used_percent=10.0),
+        },
+        latest_secondary={
+            "a": _make_test_usage("a", window="secondary", used_percent=95.0),
+        },
+    )
+
+    async def fake_load_selection_inputs(*, model=None, additional_limit_name=None, account_ids=None):
+        del model, additional_limit_name, account_ids
+        return selection_inputs
+
+    balancer._load_selection_inputs = fake_load_selection_inputs  # type: ignore[method-assign]
+
+    should_fallback = await balancer.should_fallback_to_platform_for_usage_drain(model="gpt-5.1")
+
+    assert should_fallback is True
+
+
+@pytest.mark.asyncio
+async def test_should_fallback_to_platform_for_usage_drain_keeps_weekly_only_candidate_healthy():
+    balancer = LoadBalancer(lambda: None)
+    accounts = [_make_test_account("a")]
+    selection_inputs = SelectionInputs(
+        accounts=accounts,
+        latest_primary={
+            "a": _make_test_usage("a", window="primary", used_percent=20.0, window_minutes=10080),
+        },
+        latest_secondary={},
+    )
+
+    async def fake_load_selection_inputs(*, model=None, additional_limit_name=None, account_ids=None):
+        del model, additional_limit_name, account_ids
+        return selection_inputs
+
+    balancer._load_selection_inputs = fake_load_selection_inputs  # type: ignore[method-assign]
+
+    should_fallback = await balancer.should_fallback_to_platform_for_usage_drain(model="gpt-5.1")
+
+    assert should_fallback is False
+
+
+@pytest.mark.asyncio
 async def test_should_fallback_to_platform_for_usage_drain_returns_true_when_force_enabled(monkeypatch):
     balancer = LoadBalancer(lambda: None)
     accounts = [_make_test_account("a")]
