@@ -5,10 +5,11 @@ The current Platform fallback only covers public `/v1/models` and stateless `/v1
 ## What Changes
 
 - Extend Platform fallback eligibility to HTTP `/backend-api/codex/models` and stateless HTTP `/backend-api/codex/responses`.
+- Treat downstream Codex session headers on backend HTTP responses as transport hints instead of payload continuity blockers.
 - Translate backend Codex HTTP requests onto the public OpenAI Platform Responses API contract.
 - Keep websocket, compact, and continuity-dependent Codex request shapes explicitly unsupported in this increment.
 
 ## Impact
 
-- Codex app/CLI traffic that stays on HTTP and does not require continuity can fall back to Platform when the ChatGPT pool is exhausted.
-- The routing policy remains fail-closed for websocket, compact, and continuity-dependent Codex traffic until dedicated support is implemented.
+- Codex app/CLI traffic that stays on HTTP can still fall back to Platform even when clients replay `session_id`, `x-codex-session-id`, `x-codex-conversation-id`, or `x-codex-turn-state`.
+- The routing policy remains fail-closed for websocket, compact, and payload-level continuity (`conversation`, `previous_response_id`) until dedicated support is implemented.

@@ -9,8 +9,10 @@
 - [x] 2.2 Implement Platform-backed `/backend-api/codex/models` translation.
 - [x] 2.3 Implement Platform-backed stateless HTTP `/backend-api/codex/responses`.
 - [x] 2.4 Keep websocket, compact, and continuity-dependent backend Codex requests fail-closed.
+- [x] 2.5 Treat backend Codex HTTP session headers as transport hints so they do not suppress eligible fallback.
 
 ## 3. Verification
 
 - [x] 3.1 Add regression coverage for backend Codex HTTP fallback selection and translation.
 - [x] 3.2 Verify unsupported backend Codex websocket/compact/continuity requests remain blocked or ChatGPT-only.
+- [x] 3.3 Verify backend Codex HTTP session headers no longer block eligible fallback.

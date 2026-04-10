@@ -182,7 +182,7 @@ def test_derive_request_capabilities_marks_backend_codex_session_headers_as_cont
         headers={header_name: "sid_1"},
     )
 
-    assert capabilities.continuity_param == header_name
+    assert capabilities.continuity_param is None
 
 
 @pytest.mark.parametrize(
@@ -199,7 +199,7 @@ def test_derive_request_capabilities_marks_backend_codex_header_continuity(heade
         headers={header_name: "sid_1"},
     )
 
-    assert capabilities.continuity_param == header_name
+    assert capabilities.continuity_param is None
 
 
 @pytest.mark.asyncio
@@ -375,7 +375,7 @@ async def test_select_routing_subject_uses_platform_for_backend_codex_http_when_
 
 
 @pytest.mark.asyncio
-async def test_select_routing_subject_falls_back_to_chatgpt_for_continuity(monkeypatch) -> None:
+async def test_select_routing_subject_falls_back_to_chatgpt_for_public_route_continuity(monkeypatch) -> None:
     service = proxy_service_module.ProxyService(lambda: _repo_factory())
 
     async def fake_has_chatgpt_candidates(model: str | None = None, *, account_ids=None) -> bool:
@@ -408,6 +408,50 @@ async def test_select_routing_subject_falls_back_to_chatgpt_for_continuity(monke
     selected = result.selected
     assert isinstance(selected, proxy_service_module.SelectedChatGPTSubject)
     assert selected.provider_kind == "chatgpt_web"
+
+
+@pytest.mark.asyncio
+async def test_select_routing_subject_uses_platform_for_backend_codex_session_headers_when_fallback_needed(
+    monkeypatch,
+) -> None:
+    service = proxy_service_module.ProxyService(lambda: _repo_factory())
+
+    async def fake_has_chatgpt_candidates(model: str | None = None, *, account_ids=None) -> bool:
+        del model, account_ids
+        return True
+
+    async def fake_should_fallback(*, model: str | None, account_ids=None) -> bool:
+        del model, account_ids
+        return True
+
+    async def fake_select_platform_identity(route_family: str, **kwargs):
+        del route_family, kwargs
+        return proxy_service_module._SelectedPlatformIdentity(
+            id="plat_1",
+            api_key_encrypted=TokenEncryptor().encrypt("sk-platform"),
+            organization_id=None,
+            project_id=None,
+        )
+
+    monkeypatch.setattr(service, "has_chatgpt_candidates", fake_has_chatgpt_candidates)
+    monkeypatch.setattr(service, "should_fallback_to_platform_for_usage_drain", fake_should_fallback)
+    monkeypatch.setattr(service, "select_platform_identity", fake_select_platform_identity)
+
+    result = await service.select_routing_subject(
+        capabilities=proxy_service_module.RequestCapabilities(
+            route_family=BACKEND_CODEX_HTTP_ROUTE_FAMILY,
+            route_class=CHATGPT_PRIVATE_ROUTE_CLASS,
+            transport="http",
+            model="gpt-5.1",
+            continuity_param=None,
+        )
+    )
+
+    assert result.is_platform is True
+    selected = result.selected
+    assert isinstance(selected, proxy_service_module.SelectedPlatformSubject)
+    assert selected.provider_kind == OPENAI_PLATFORM_PROVIDER_KIND
+    assert selected.routing_subject_id == "plat_1"
 
 
 @pytest.mark.asyncio

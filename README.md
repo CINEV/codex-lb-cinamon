@@ -14,6 +14,17 @@ Resources
 
 이 포크 `codex-lb-cinamon`은 [codex-lb](https://github.com/Soju06/codex-lb)를 기반으로, `OpenAI Platform API key`를 보조 upstream으로 등록해 ChatGPT 계정들의 사용량이 모두 소진되었을 때 fallback으로 사용할 수 있도록 수정한 버전입니다. 즉 기본 경로는 계속 ChatGPT 계정 풀을 사용하고, 필요할 때만 Platform API로 우회하는 개인/사내 운영용 포크를 목표로 합니다.
 
+## Platform fallback 주의사항
+
+- `openai_platform`은 여전히 fallback 전용입니다. 최소 1개의 활성 `chatgpt_web` 계정이 있어야 등록과 라우팅이 가능합니다.
+- 일반 fallback은 모든 호환 ChatGPT 계정이 drain 기준을 넘었을 때만 활성화됩니다.
+  - 기본 기준: `primary remaining <= 10%`, `secondary remaining <= 5%`
+- `CODEX_LB_PLATFORM_FALLBACK_FORCE_ENABLED=true`를 주면 usage drain 여부와 무관하게 fallback 판정을 강제할 수 있습니다.
+- `backend_codex_http`를 켜면 HTTP `GET /backend-api/codex/models` 와 HTTP `POST /backend-api/codex/responses` 가 Platform fallback 후보가 됩니다.
+- HTTP `POST /backend-api/codex/responses` 에서 `session_id`, `x-codex-session-id`, `x-codex-conversation-id`, `x-codex-turn-state` 같은 Codex 세션 헤더는 fallback을 막지 않습니다.
+- 하지만 payload의 `conversation` 또는 `previous_response_id` 는 여전히 Platform에서 지원하지 않으므로 fallback 대상이 아닙니다.
+- websocket `/backend-api/codex/responses`, `/v1/chat/completions`, compact 경로는 phase 1에서 Platform fallback을 지원하지 않습니다.
+
 
 ## 주요 기능
 

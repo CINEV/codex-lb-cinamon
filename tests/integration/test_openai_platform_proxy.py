@@ -1346,24 +1346,35 @@ async def test_backend_codex_responses_uses_platform_when_force_fallback_is_enab
 
 
 @pytest.mark.asyncio
-async def test_backend_codex_responses_with_turn_state_stays_on_chatgpt_path(async_client, monkeypatch):
-    raw_account_id = "acc_backend_http_turn_state"
-    expected_account_id = await _import_account(async_client, raw_account_id, "backend-http-turn-state@example.com")
-    await _seed_primary_usage(expected_account_id, 95.0)
-    await _seed_secondary_usage(expected_account_id, 95.0)
-    await _create_platform_identity(async_client, monkeypatch, route_families=["backend_codex_http"])
+async def test_backend_codex_responses_with_turn_state_header_uses_platform_fallback(async_client, monkeypatch):
+    account_id = await _import_account(
+        async_client,
+        "acc_backend_http_turn_state",
+        "backend-http-turn-state@example.com",
+    )
+    await _seed_primary_usage(account_id, 95.0)
+    await _seed_secondary_usage(account_id, 95.0)
+    identity_id = await _create_platform_identity(async_client, monkeypatch, route_families=["backend_codex_http"])
 
-    async def fail_stream_platform_responses(*, base_url, payload, api_key, organization=None, project=None):
-        del base_url, payload, api_key, organization, project
-        raise AssertionError("turn-state continuity should keep backend codex responses on the ChatGPT path")
+    async def fake_stream_platform_responses(*, base_url, payload, api_key, organization=None, project=None):
+        del base_url, api_key, organization, project
+        assert payload["model"] == "gpt-5.1"
+        return PlatformStreamResponse(
+            event_stream=_stream_lines(
+                [
+                    'data: {"type":"response.created"}\n\n',
+                    'data: {"type":"response.completed","response":{"id":"resp_backend_http_turn_state_platform"}}\n\n',
+                ]
+            ),
+            upstream_request_id="up_req_backend_http_turn_state_stream",
+        )
 
-    async def fake_stream(payload, headers, access_token, account_id, base_url=None, raise_for_status=False, **_kw):
-        del payload, headers, access_token, base_url, raise_for_status, _kw
-        assert account_id == raw_account_id
-        yield 'data: {"type":"response.completed","response":{"id":"resp_chatgpt_turn_state"}}\n\n'
+    def fail_stream_http_responses(self, *args, **kwargs):
+        del self, args, kwargs
+        raise AssertionError("backend codex session headers should not suppress eligible platform fallback")
 
-    monkeypatch.setattr(provider_adapters_module, "stream_platform_responses", fail_stream_platform_responses)
-    monkeypatch.setattr(provider_adapters_module, "core_stream_responses", fake_stream)
+    monkeypatch.setattr(provider_adapters_module, "stream_platform_responses", fake_stream_platform_responses)
+    monkeypatch.setattr(proxy_service_module.ProxyService, "stream_http_responses", fail_stream_http_responses)
 
     async with async_client.stream(
         "POST",
@@ -1374,12 +1385,15 @@ async def test_backend_codex_responses_with_turn_state_stays_on_chatgpt_path(asy
         assert response.status_code == 200
         lines = [line async for line in response.aiter_lines() if line]
 
-    assert lines == ['data: {"type":"response.completed","response":{"id":"resp_chatgpt_turn_state"}}']
+    assert lines == [
+        'data: {"type":"response.created"}',
+        'data: {"type":"response.completed","response":{"id":"resp_backend_http_turn_state_platform"}}',
+    ]
 
     log = await _latest_request_log()
     assert log is not None
-    assert log.provider_kind == "chatgpt_web"
-    assert log.account_id == expected_account_id
+    assert log.provider_kind == "openai_platform"
+    assert log.routing_subject_id == identity_id
 
 
 @pytest.mark.asyncio
