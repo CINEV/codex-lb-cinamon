@@ -333,6 +333,7 @@ async def test_create_platform_identity_translates_integrity_conflict(async_clie
 async def test_v1_models_keeps_chatgpt_primary_when_usage_is_healthy(async_client, monkeypatch):
     account_id = await _import_account(async_client, "acc_models_primary", "models-primary@example.com")
     await _seed_primary_usage(account_id, 10.0)
+    await _seed_secondary_usage(account_id, 10.0)
     await _create_platform_identity(async_client, monkeypatch, route_families=["public_models_http"])
 
     async def fail_fetch_platform_models(*, base_url, api_key, organization=None, project=None):
@@ -446,6 +447,7 @@ async def test_v1_responses_keeps_chatgpt_primary_when_usage_is_healthy(async_cl
     raw_account_id = "acc_resp_primary"
     expected_account_id = await _import_account(async_client, raw_account_id, "resp-primary@example.com")
     await _seed_primary_usage(expected_account_id, 10.0)
+    await _seed_secondary_usage(expected_account_id, 10.0)
     await _create_platform_identity(async_client, monkeypatch, route_families=["public_responses_http"])
 
     async def fail_create_platform_response(*, base_url, payload, api_key, organization=None, project=None):
@@ -480,6 +482,7 @@ async def test_v1_responses_routes_using_enforced_api_key_model(async_client, mo
     raw_account_id = "acc_resp_enforced_model"
     expected_account_id = await _import_account(async_client, raw_account_id, "resp-enforced@example.com")
     await _seed_primary_usage(expected_account_id, 10.0)
+    await _seed_secondary_usage(expected_account_id, 10.0)
     await _create_platform_identity(async_client, monkeypatch, route_families=["public_responses_http"])
 
     enable = await async_client.put(
@@ -586,7 +589,9 @@ async def test_v1_responses_keeps_chatgpt_primary_when_any_account_in_pool_is_he
     unhealthy_account_id = await _import_account(async_client, "acc_resp_unhealthy", "resp-unhealthy@example.com")
     healthy_account_id = await _import_account(async_client, "acc_resp_healthy", "resp-healthy@example.com")
     await _seed_primary_usage(unhealthy_account_id, 95.0)
+    await _seed_secondary_usage(unhealthy_account_id, 95.0)
     await _seed_primary_usage(healthy_account_id, 10.0)
+    await _seed_secondary_usage(healthy_account_id, 10.0)
     await _create_platform_identity(async_client, monkeypatch, route_families=["public_responses_http"])
 
     async def fail_create_platform_response(*, base_url, payload, api_key, organization=None, project=None):
@@ -652,6 +657,61 @@ async def test_v1_responses_falls_back_to_platform_when_secondary_usage_is_deple
     assert log.routing_subject_id == identity_id
     assert log.route_class == "openai_public_http"
     assert log.upstream_request_id == "up_req_resp_secondary_1"
+
+
+@pytest.mark.asyncio
+async def test_v1_responses_falls_back_to_platform_when_other_candidate_has_partial_usage_snapshot(
+    async_client,
+    monkeypatch,
+):
+    drained_account_id = await _import_account(
+        async_client,
+        "acc_resp_partial_drained",
+        "resp-partial-drained@example.com",
+    )
+    await _seed_primary_usage(drained_account_id, 95.0)
+    await _seed_secondary_usage(drained_account_id, 95.0)
+    await _import_account(async_client, "acc_resp_partial_known", "resp-partial-known@example.com")
+    async with SessionLocal() as session:
+        result = await session.execute(select(Account.id).where(Account.chatgpt_account_id == "acc_resp_partial_known"))
+        partial_account_id = result.scalar_one()
+    await _seed_primary_usage(partial_account_id, 10.0)
+    identity_id = await _create_platform_identity(async_client, monkeypatch, route_families=["public_responses_http"])
+
+    async def fake_create_platform_response(*, base_url, payload, api_key, organization=None, project=None):
+        del base_url, api_key, organization, project
+        assert payload["model"] == "gpt-5.1"
+        _assert_platform_text_input(payload, "hi")
+        return PlatformResponseResult(
+            payload=OpenAIResponsePayload.model_validate(
+                {
+                    "id": "resp_platform_partial_usage",
+                    "status": "completed",
+                    "usage": {"input_tokens": 2, "output_tokens": 3, "total_tokens": 5},
+                }
+            ),
+            upstream_request_id="up_req_resp_partial_usage",
+        )
+
+    async def fail_stream(payload, headers, access_token, account_id, base_url=None, raise_for_status=False, **_kw):
+        del payload, headers, access_token, account_id, base_url, raise_for_status, _kw
+        raise AssertionError("partial-missing ChatGPT usage snapshots must not keep public fallback on ChatGPT")
+
+    monkeypatch.setattr(provider_adapters_module, "create_platform_response", fake_create_platform_response)
+    monkeypatch.setattr(provider_adapters_module, "core_stream_responses", fail_stream)
+
+    response = await async_client.post("/v1/responses", json={"model": "gpt-5.1", "input": "hi"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["id"] == "resp_platform_partial_usage"
+    assert payload["status"] == "completed"
+
+    log = await _latest_request_log()
+    assert log is not None
+    assert log.provider_kind == "openai_platform"
+    assert log.routing_subject_id == identity_id
+    assert log.route_class == "openai_public_http"
+    assert log.upstream_request_id == "up_req_resp_partial_usage"
 
 
 @pytest.mark.asyncio
@@ -1336,6 +1396,128 @@ async def test_backend_codex_responses_uses_platform_when_force_fallback_is_enab
     assert lines == [
         'data: {"type":"response.created"}',
         'data: {"type":"response.completed","response":{"id":"resp_backend_http_platform_force"}}',
+    ]
+
+    log = await _latest_request_log()
+    assert log is not None
+    assert log.provider_kind == "openai_platform"
+    assert log.routing_subject_id == identity_id
+    assert log.route_class == "chatgpt_private"
+
+
+@pytest.mark.asyncio
+async def test_backend_codex_responses_uses_platform_when_other_candidate_has_no_usage_snapshot(
+    async_client,
+    monkeypatch,
+):
+    drained_account_id = await _import_account(
+        async_client,
+        "acc_backend_http_drained",
+        "backend-http-drained@example.com",
+    )
+    await _seed_primary_usage(drained_account_id, 95.0)
+    await _seed_secondary_usage(drained_account_id, 95.0)
+    await _import_account(async_client, "acc_backend_http_unknown", "backend-http-unknown@example.com")
+    identity_id = await _create_platform_identity(async_client, monkeypatch, route_families=["backend_codex_http"])
+
+    async def fake_stream_platform_responses(*, base_url, payload, api_key, organization=None, project=None):
+        del base_url, api_key, organization, project
+        assert payload["model"] == "gpt-5.1"
+        return PlatformStreamResponse(
+            event_stream=_stream_lines(
+                [
+                    'data: {"type":"response.created"}\n\n',
+                    (
+                        'data: {"type":"response.completed","response":'
+                        '{"id":"resp_backend_http_unknown_usage_platform"}}\n\n'
+                    ),
+                ]
+            ),
+            upstream_request_id="up_req_backend_http_unknown_usage_stream",
+        )
+
+    def fail_stream_http_responses(self, *args, **kwargs):
+        del self, args, kwargs
+        raise AssertionError("unknown ChatGPT usage snapshots must not keep backend Codex fallback on ChatGPT")
+
+    monkeypatch.setattr(provider_adapters_module, "stream_platform_responses", fake_stream_platform_responses)
+    monkeypatch.setattr(proxy_service_module.ProxyService, "stream_http_responses", fail_stream_http_responses)
+
+    async with async_client.stream(
+        "POST",
+        "/backend-api/codex/responses",
+        json={"model": "gpt-5.1", "instructions": "hi", "input": [], "stream": True},
+    ) as response:
+        assert response.status_code == 200
+        lines = [line async for line in response.aiter_lines() if line]
+
+    assert lines == [
+        'data: {"type":"response.created"}',
+        'data: {"type":"response.completed","response":{"id":"resp_backend_http_unknown_usage_platform"}}',
+    ]
+
+    log = await _latest_request_log()
+    assert log is not None
+    assert log.provider_kind == "openai_platform"
+    assert log.routing_subject_id == identity_id
+    assert log.route_class == "chatgpt_private"
+
+
+@pytest.mark.asyncio
+async def test_backend_codex_responses_uses_platform_when_other_candidate_has_partial_usage_snapshot(
+    async_client,
+    monkeypatch,
+):
+    drained_account_id = await _import_account(
+        async_client,
+        "acc_backend_http_partial_drained",
+        "backend-http-partial-drained@example.com",
+    )
+    await _seed_primary_usage(drained_account_id, 95.0)
+    await _seed_secondary_usage(drained_account_id, 95.0)
+    await _import_account(async_client, "acc_backend_http_partial_known", "backend-http-partial-known@example.com")
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(Account.id).where(Account.chatgpt_account_id == "acc_backend_http_partial_known")
+        )
+        partial_account_id = result.scalar_one()
+    await _seed_primary_usage(partial_account_id, 10.0)
+    identity_id = await _create_platform_identity(async_client, monkeypatch, route_families=["backend_codex_http"])
+
+    async def fake_stream_platform_responses(*, base_url, payload, api_key, organization=None, project=None):
+        del base_url, api_key, organization, project
+        assert payload["model"] == "gpt-5.1"
+        return PlatformStreamResponse(
+            event_stream=_stream_lines(
+                [
+                    'data: {"type":"response.created"}\n\n',
+                    (
+                        'data: {"type":"response.completed","response":'
+                        '{"id":"resp_backend_http_partial_usage_platform"}}\n\n'
+                    ),
+                ]
+            ),
+            upstream_request_id="up_req_backend_http_partial_usage_stream",
+        )
+
+    def fail_stream_http_responses(self, *args, **kwargs):
+        del self, args, kwargs
+        raise AssertionError("partial-missing ChatGPT usage snapshots must not keep backend Codex fallback on ChatGPT")
+
+    monkeypatch.setattr(provider_adapters_module, "stream_platform_responses", fake_stream_platform_responses)
+    monkeypatch.setattr(proxy_service_module.ProxyService, "stream_http_responses", fail_stream_http_responses)
+
+    async with async_client.stream(
+        "POST",
+        "/backend-api/codex/responses",
+        json={"model": "gpt-5.1", "instructions": "hi", "input": [], "stream": True},
+    ) as response:
+        assert response.status_code == 200
+        lines = [line async for line in response.aiter_lines() if line]
+
+    assert lines == [
+        'data: {"type":"response.created"}',
+        'data: {"type":"response.completed","response":{"id":"resp_backend_http_partial_usage_platform"}}',
     ]
 
     log = await _latest_request_log()

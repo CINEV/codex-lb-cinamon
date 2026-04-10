@@ -1210,9 +1210,12 @@ def _is_chatgpt_state_healthy_for_platform_fallback(
 ) -> bool:
     primary_remaining = usage_core.remaining_percent_from_used(state.used_percent)
     secondary_remaining = usage_core.remaining_percent_from_used(state.secondary_used_percent)
-    primary_healthy = primary_remaining is None or primary_remaining > primary_remaining_threshold
-    secondary_healthy = secondary_remaining is None or secondary_remaining > secondary_remaining_threshold
-    return primary_healthy and secondary_healthy
+    return (
+        primary_remaining is not None
+        and secondary_remaining is not None
+        and primary_remaining > primary_remaining_threshold
+        and secondary_remaining > secondary_remaining_threshold
+    )
 
 
 def _state_from_account(
