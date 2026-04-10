@@ -17,21 +17,25 @@ See `openspec/specs/upstream-provider-management/spec.md` for normative requirem
 
 - `GET /v1/models`
 - stateless HTTP `POST /v1/responses`
+- `GET /backend-api/codex/models`
+- stateless HTTP `POST /backend-api/codex/responses`
+
+For backend Codex HTTP responses, downstream Codex session headers such as `session_id`, `x-codex-session-id`, `x-codex-conversation-id`, and `x-codex-turn-state` are treated as transport hints in phase 1. They do not, by themselves, suppress an otherwise eligible Platform fallback decision.
 
 ## Unsupported Platform-backed Routes in Phase 1
 
-- `/backend-api/codex/*`
 - downstream websocket `/responses`
 - downstream websocket `/v1/responses`
+- downstream websocket `/backend-api/codex/responses`
 - `/v1/responses/compact`
 - `/backend-api/codex/responses/compact`
 - `/v1/chat/completions`
-- continuity-dependent requests using `conversation`, `previous_response_id`, `session_id`, `x-codex-session-id`, `x-codex-conversation-id`, or `x-codex-turn-state`
+- continuity-dependent requests using `conversation` or `previous_response_id`
 
 ## Fallback Policy
 
-- ChatGPT accounts remain primary whenever at least one compatible `chatgpt_web` candidate is below both configured drain thresholds.
-- Platform fallback is allowed only when every compatible ChatGPT candidate is at or above either the primary or secondary drain threshold.
+- ChatGPT accounts remain primary whenever at least one compatible `chatgpt_web` candidate has both `primary_remaining_percent > 10` and `secondary_remaining_percent > 5`.
+- Platform fallback is allowed only when every compatible ChatGPT candidate is outside that healthy window.
 - Credits are not part of the fallback decision.
 
 ## Operational Constraints
@@ -44,4 +48,5 @@ See `openspec/specs/upstream-provider-management/spec.md` for normative requirem
 
 - The dashboard should describe Platform identities as fallback-only.
 - Route-family labels should clarify that `public_responses_http` means stateless HTTP `/v1/responses` only.
-- Operators should not expect compact, websocket, or ChatGPT-private behavior from the Platform path in phase 1.
+- Route-family labels should clarify that `backend_codex_http` covers `/backend-api/codex/models` plus stateless HTTP `/backend-api/codex/responses`.
+- Operators should not expect compact or websocket behavior from the Platform path in phase 1.

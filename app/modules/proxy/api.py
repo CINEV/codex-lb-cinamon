@@ -1767,6 +1767,8 @@ def _platform_continuity_param(
         return "conversation"
     if payload.previous_response_id:
         return "previous_response_id"
+    if route_family == BACKEND_CODEX_HTTP_ROUTE_FAMILY:
+        return None
     for key in ("session_id", "x-codex-session-id", "x-codex-conversation-id", "x-codex-turn-state"):
         value = headers.get(key)
         if isinstance(value, str) and value.strip():

@@ -172,7 +172,7 @@ Before forwarding Responses payloads upstream, the service MUST remove known uns
 - **THEN** the service preserves that field in forwarded payload
 
 ### Requirement: Public OpenAI-compatible route eligibility is provider-aware, transport-aware, and fallback-ordered
-The service MUST treat upstream execution as a provider-aware decision instead of assuming every request targets the ChatGPT-web backend. In phase 1, only HTTP `/v1/models` and stateless HTTP `/v1/responses` MAY route to `openai_platform`, and only when the selected upstream routing subject supports the requested route family, transport, model, and required features. For those routes, `chatgpt_web` remains primary and `openai_platform` is fallback-only.
+The service MUST treat upstream execution as a provider-aware decision instead of assuming every request targets the ChatGPT-web backend. `chatgpt_web` remains primary and `openai_platform` is fallback-only. Phase-1 Platform fallback covers HTTP `/v1/models`, stateless HTTP `/v1/responses`, HTTP `/backend-api/codex/models`, and stateless HTTP `/backend-api/codex/responses` when the selected routing subject supports the requested route family, transport, model, and required features.
 
 #### Scenario: Healthy ChatGPT-web remains primary for stateless public HTTP
 - **WHEN** a request targets an eligible public HTTP route
@@ -188,6 +188,21 @@ The service MUST treat upstream execution as a provider-aware decision instead o
 - **AND** no compatible ChatGPT-web candidate remains healthy under the configured primary and secondary drain thresholds
 - **AND** the request does not require phase-1 unsupported continuity or websocket capabilities
 - **THEN** the service forwards HTTP `/v1/responses` to the public upstream contract instead of the ChatGPT-private `/codex/responses` path
+
+#### Scenario: Backend Codex HTTP responses fall back to Platform after the ChatGPT pool is drained
+- **WHEN** the operator enables `openai_platform` for `backend_codex_http`
+- **AND** there is at least one active `chatgpt_web` account configured in the deployment
+- **AND** a compatible Platform routing subject is available for the requested model
+- **AND** no compatible ChatGPT-web candidate remains healthy under the configured fallback thresholds
+- **AND** the request does not require websocket or payload-level continuity-dependent behavior
+- **THEN** the service forwards HTTP `/backend-api/codex/responses` through the Platform transport instead of the ChatGPT-private upstream path
+
+#### Scenario: Backend Codex HTTP model discovery falls back to Platform after the ChatGPT pool is drained
+- **WHEN** the operator enables `openai_platform` for `backend_codex_http`
+- **AND** there is at least one active `chatgpt_web` account configured in the deployment
+- **AND** a compatible Platform routing subject is available
+- **AND** no compatible ChatGPT-web candidate remains healthy under the configured fallback thresholds
+- **THEN** the service may satisfy HTTP `/backend-api/codex/models` from Platform model discovery translated into the backend Codex response shape
 
 #### Scenario: Platform identity is excluded from downstream websocket route selection in phase 1
 - **WHEN** a request targets downstream websocket `/responses` or `/v1/responses`
@@ -208,7 +223,7 @@ The service MUST treat upstream execution as a provider-aware decision instead o
 - **AND** it returns an OpenAI-format error envelope with `type = "invalid_request_error"` and `code = "provider_fallback_requires_chatgpt"`
 
 ### Requirement: Continuity-dependent request shapes are gated before provider selection
-The service MUST derive request capabilities from both route and request shape before it chooses an upstream routing subject. In phase 1, requests are continuity-dependent when they rely on `conversation`, `previous_response_id`, explicit session headers, `x-codex-turn-state`, or downstream websocket continuity semantics.
+The service MUST derive request capabilities from both route and request shape before it chooses an upstream routing subject. Requests are continuity-dependent when they rely on `conversation`, `previous_response_id`, explicit session headers, `x-codex-turn-state`, or downstream websocket continuity semantics. For HTTP `/backend-api/codex/responses`, downstream Codex session headers are transport hints and MUST NOT by themselves block Platform fallback in this increment; payload-level continuity fields remain unsupported.
 
 #### Scenario: Platform-backed `conversation` request is rejected in phase 1
 - **WHEN** a request targets HTTP `/v1/responses`
@@ -224,12 +239,28 @@ The service MUST derive request capabilities from both route and request shape b
 - **THEN** the service rejects the request before upstream transport start with HTTP `400`
 - **AND** it returns an OpenAI-format error envelope with `type = "invalid_request_error"`, `code = "provider_continuity_unsupported"`, and `param = "previous_response_id"`
 
-#### Scenario: Platform-backed session-affinity headers are rejected in phase 1
-- **WHEN** a request targets an OpenAI-compatible route
+#### Scenario: Platform-backed session-affinity headers are rejected on public OpenAI-compatible routes in phase 1
+- **WHEN** a request targets a public OpenAI-compatible route
 - **AND** the allowed upstream candidates are restricted to `openai_platform`
 - **AND** the request carries `session_id`, `x-codex-session-id`, `x-codex-conversation-id`, or `x-codex-turn-state`
 - **THEN** the service rejects the request before upstream transport start with HTTP `400`
 - **AND** it returns an OpenAI-format error envelope with `type = "invalid_request_error"`, `code = "provider_continuity_unsupported"`, and `param` set to the first offending continuity field name
+
+#### Scenario: Backend Codex HTTP payload continuity request is rejected for Platform fallback
+- **WHEN** a request targets HTTP `/backend-api/codex/responses`
+- **AND** the allowed upstream candidates are restricted to `openai_platform`
+- **AND** the request includes `conversation` or `previous_response_id`
+- **THEN** the service rejects the request before upstream transport start with HTTP `400`
+- **AND** it returns an OpenAI-format error envelope with `code = "provider_continuity_unsupported"`
+
+#### Scenario: Backend Codex HTTP session headers do not block Platform fallback
+- **WHEN** a request targets HTTP `/backend-api/codex/responses`
+- **AND** the allowed upstream candidates include an eligible `openai_platform` routing subject for `backend_codex_http`
+- **AND** no compatible ChatGPT-web candidate remains healthy under the configured fallback thresholds
+- **AND** the request includes `session_id`, `x-codex-session-id`, `x-codex-conversation-id`, or `x-codex-turn-state`
+- **AND** the request does not include `conversation` or `previous_response_id`
+- **THEN** the service MAY route the request to Platform fallback
+- **AND** those downstream session headers MUST NOT by themselves trigger `provider_continuity_unsupported`
 
 ### Requirement: Platform mode rejects phase-1 unsupported routes and features
 When the selected upstream provider is `openai_platform`, the service MUST explicitly reject routes and features that still depend on ChatGPT-private or phase-gated contracts until equivalent public semantics are intentionally implemented and verified.
@@ -239,10 +270,10 @@ When the selected upstream provider is `openai_platform`, the service MUST expli
 - **THEN** the service returns HTTP `400`
 - **AND** it returns an OpenAI-format error envelope with `type = "invalid_request_error"`, `code = "provider_feature_unsupported"`, and no required `param`
 
-#### Scenario: Platform-backed backend Codex route is rejected in phase 1
-- **WHEN** an `openai_platform` routing subject receives any `/backend-api/codex/*` request
-- **THEN** the service rejects the request instead of forwarding it to a ChatGPT-private upstream path
-- **AND** it returns HTTP `400` with `type = "invalid_request_error"` and `code = "provider_feature_unsupported"`
+#### Scenario: Backend Codex websocket remains unsupported for Platform fallback
+- **WHEN** an `openai_platform` routing subject receives `/backend-api/codex/responses` over websocket transport
+- **THEN** the service returns HTTP `400`
+- **AND** it returns an OpenAI-format error envelope with `code = "provider_transport_unsupported"`
 
 ### Requirement: Provider mismatch errors use stable codes
 For provider-specific capability failures introduced by provider-aware public-route fallback, the service MUST use stable OpenAI-style error envelopes and stable proxy-defined codes so tests and clients can distinguish route, transport, and continuity failures.
