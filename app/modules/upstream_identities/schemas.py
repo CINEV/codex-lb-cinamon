@@ -29,6 +29,7 @@ class PlatformIdentityCreateRequest(DashboardModel):
             return stripped or None
         return value
 
+
 class PlatformIdentityUpdateRequest(DashboardModel):
     label: str | None = None
     api_key: str | None = None
@@ -56,6 +57,7 @@ class PlatformIdentityUpdateRequest(DashboardModel):
             stripped = value.strip()
             return stripped or None
         return value
+
 
 class PlatformIdentityValidationResult(DashboardModel):
     valid: bool

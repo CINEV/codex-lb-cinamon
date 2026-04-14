@@ -337,7 +337,7 @@ class ProxyResponseError(Exception):
         failure_detail: str | None = None,
         failure_exception_type: str | None = None,
         upstream_status_code: int | None = None,
-    upstream_request_id: str | None = None,
+        upstream_request_id: str | None = None,
         provider_kind: str | None = None,
         routing_subject_id: str | None = None,
     ) -> None:

@@ -199,6 +199,7 @@ async def _set_account_status(
 
 async def _create_platform_identity(async_client, monkeypatch, *, route_families: list[str] | None = None) -> str:
     del route_families
+
     async def fake_validate_platform_identity(self, *, api_key, organization=None, project=None):
         del self, api_key, organization, project
         return PlatformModelsResponse(

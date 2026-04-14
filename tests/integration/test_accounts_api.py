@@ -682,9 +682,7 @@ async def test_update_platform_identity_ignores_legacy_route_family_payload(asyn
     account_id = create_response.json()["accountId"]
 
     async with SessionLocal() as session:
-        result = await session.execute(
-            select(OpenAIPlatformIdentity).where(OpenAIPlatformIdentity.id == account_id)
-        )
+        result = await session.execute(select(OpenAIPlatformIdentity).where(OpenAIPlatformIdentity.id == account_id))
         identity = result.scalar_one()
         assert list(split_route_families(identity.eligible_route_families)) == EXPECTED_PLATFORM_ROUTE_FAMILIES
 
@@ -696,9 +694,7 @@ async def test_update_platform_identity_ignores_legacy_route_family_payload(asyn
     assert update_response.json()["eligibleRouteFamilies"] == EXPECTED_PLATFORM_ROUTE_FAMILIES
 
     async with SessionLocal() as session:
-        result = await session.execute(
-            select(OpenAIPlatformIdentity).where(OpenAIPlatformIdentity.id == account_id)
-        )
+        result = await session.execute(select(OpenAIPlatformIdentity).where(OpenAIPlatformIdentity.id == account_id))
         identity = result.scalar_one()
         assert list(split_route_families(identity.eligible_route_families)) == EXPECTED_PLATFORM_ROUTE_FAMILIES
 

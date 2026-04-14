@@ -1302,9 +1302,7 @@ async def _selection_affinity_for_responses_request(
 
 
 def _selected_subject_log_fields(
-    selected: proxy_service_module.SelectedChatGPTSubject
-    | proxy_service_module.SelectedPlatformSubject
-    | None,
+    selected: proxy_service_module.SelectedChatGPTSubject | proxy_service_module.SelectedPlatformSubject | None,
 ) -> dict[str, str | None]:
     if selected is None:
         return {
@@ -1552,9 +1550,7 @@ async def _maybe_handle_platform_responses(
                 error_message="Failed to receive the initial OpenAI Platform streaming response.",
                 route_class=route_class,
                 rejection_reason="platform_stream_start_failed",
-                upstream_request_id=(
-                    upstream_response.upstream_request_id if upstream_response is not None else None
-                ),
+                upstream_request_id=(upstream_response.upstream_request_id if upstream_response is not None else None),
                 transport="http",
                 latency_ms=int((time.monotonic() - start) * 1000),
             )
@@ -1570,9 +1566,7 @@ async def _maybe_handle_platform_responses(
                 routing_subject_id=selected.identity.id,
                 route_class=route_class,
                 rejection_reason="platform_stream_start_failed",
-                upstream_request_id=(
-                    upstream_response.upstream_request_id if upstream_response is not None else None
-                ),
+                upstream_request_id=(upstream_response.upstream_request_id if upstream_response is not None else None),
             )
         except OpenAIPlatformError as exc:
             await _release_reservation(reservation)
