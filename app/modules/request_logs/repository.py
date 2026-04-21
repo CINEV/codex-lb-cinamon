@@ -139,13 +139,18 @@ class RequestLogsRepository:
         actual_service_tier: str | None = None,
         transport: str | None = None,
         api_key_id: str | None = None,
+        plan_type: str | None = None,
     ) -> RequestLog:
         resolved_request_id = ensure_request_id(request_id)
+        resolved_plan_type = plan_type
+        if resolved_plan_type is None and account_id:
+            resolved_plan_type = await self._resolve_account_plan_type(account_id)
         log = RequestLog(
             account_id=account_id,
             api_key_id=api_key_id,
             request_id=resolved_request_id,
             model=model,
+            plan_type=resolved_plan_type,
             transport=transport,
             service_tier=service_tier,
             requested_service_tier=requested_service_tier,
@@ -229,6 +234,10 @@ class RequestLogsRepository:
             count_stmt = count_stmt.where(and_(*filters.conditions))
         result = await self._session.execute(count_stmt)
         return int(result.scalar_one())
+
+    async def _resolve_account_plan_type(self, account_id: str) -> str | None:
+        result = await self._session.execute(select(Account.plan_type).where(Account.id == account_id).limit(1))
+        return result.scalar_one_or_none()
 
     async def list_filter_options(
         self,
