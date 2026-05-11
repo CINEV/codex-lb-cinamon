@@ -169,6 +169,70 @@ launchctl kickstart -k gui/$(id -u)/com.cinev.codex-lb-cinamon.menubar
 launchctl bootout gui/$(id -u)/com.cinev.codex-lb-cinamon.menubar
 ```
 
+이 명령은 메뉴바 앱 자체를 터미널 foreground 프로세스로 실행합니다. 따라서 터미널을 닫으면 메뉴바 앱도 함께 종료됩니다. `--manage-server`와 `--start-on-launch`는 추적된 API 서버를 백그라운드로 시작하고 관리하는 옵션이며, 메뉴바 앱 프로세스를 macOS 로그인 항목이나 LaunchAgent로 등록하지는 않습니다.
+
+터미널과 분리해서 실행하려면 `nohup`으로 detached 실행할 수 있습니다.
+
+```bash
+mkdir -p ~/.codex-lb
+nohup uv run codex-lb-cinamon menubar --manage-server --start-on-launch \
+  > ~/.codex-lb/menubar.log 2>&1 &
+disown
+```
+
+일상적으로 계속 사용할 때는 macOS `LaunchAgent` 등록을 권장합니다. 먼저 현재 checkout을 전역 도구로 설치합니다.
+
+```bash
+uv tool install --reinstall .
+```
+
+`uv`가 `/Users/jacob/.local/bin`이 PATH에 없다고 안내하면, LaunchAgent의 `ProgramArguments`에는 `/Users/jacob/.local/bin/codex-lb-cinamon`처럼 절대경로를 사용합니다. 터미널에서 `codex-lb-cinamon`만 입력해 최신 설치본을 쓰려면 `~/.local/bin`을 shell PATH 앞쪽에 추가해야 합니다.
+
+그다음 `~/Library/LaunchAgents/com.cinev.codex-lb-cinamon.menubar.plist`에 아래처럼 등록하면 로그인 시 메뉴바 앱이 자동으로 실행되고, 메뉴바 앱이 서버를 함께 관리합니다.
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.cinev.codex-lb-cinamon.menubar</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/jacob/.local/bin/codex-lb-cinamon</string>
+    <string>menubar</string>
+    <string>--manage-server</string>
+    <string>--start-on-launch</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/Users/jacob/.codex-lb/menubar.launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/jacob/.codex-lb/menubar.launchd.err.log</string>
+</dict>
+</plist>
+```
+
+등록 후 즉시 시작하려면 현재 macOS 사용자 UID를 확인한 뒤 bootstrap/kickstart를 실행합니다.
+
+```bash
+id -u
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.cinev.codex-lb-cinamon.menubar.plist
+launchctl kickstart -k gui/$(id -u)/com.cinev.codex-lb-cinamon.menubar
+```
+
+해제하려면 아래 명령을 사용합니다.
+
+```bash
+launchctl bootout gui/$(id -u)/com.cinev.codex-lb-cinamon.menubar
+```
+
 이미 실행 중인 서버만 읽고 싶다면 기존처럼 base URL을 지정해 상태 앱으로만 실행할 수 있습니다.
 
 ```bash
