@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.17.0](https://github.com/CINEV/codex-lb-cinamon/compare/v1.16.0...v1.17.0) (2026-05-14)
+
+
+### Features
+
+* **proxy:** alert on platform cache misses ([9263d2e](https://github.com/CINEV/codex-lb-cinamon/commit/9263d2ed42cf19efcd145d271f1b79367d1aa40a))
+
+
+### Bug Fixes
+
+* **proxy:** preserve platform fallback cache affinity ([118bbcc](https://github.com/CINEV/codex-lb-cinamon/commit/118bbcc0942552ba30a3b1c51d3f92dc0caf960a))
+* **proxy:** preserve platform fallback cache affinity ([d7df03e](https://github.com/CINEV/codex-lb-cinamon/commit/d7df03e1f8e3c43c8fc875365ca9d398b668b191))
+
 ## [1.16.0](https://github.com/CINEV/codex-lb-cinamon/compare/v1.15.2...v1.16.0) (2026-05-12)
 
 
