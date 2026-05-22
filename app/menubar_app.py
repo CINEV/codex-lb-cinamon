@@ -19,6 +19,7 @@ from app.menubar_runtime import (
 from app.menubar_summary import (
     AccountMenuCard,
     MenuBarConfig,
+    MenuBarDonutSummary,
     MenuBarSnapshot,
     fetch_menu_bar_snapshot,
 )
@@ -45,16 +46,19 @@ def _run_cocoa_app(config: MenuBarConfig, runtime_options: MenuBarRuntimeOptions
 
     NSApplication = getattr(appkit, "NSApplication")
     NSApplicationActivationPolicyAccessory = getattr(appkit, "NSApplicationActivationPolicyAccessory")
+    NSBezierPath = getattr(appkit, "NSBezierPath")
     NSButton = getattr(appkit, "NSButton")
     NSColor = getattr(appkit, "NSColor")
     NSFont = getattr(appkit, "NSFont")
     NSMenu = getattr(appkit, "NSMenu")
     NSMenuItem = getattr(appkit, "NSMenuItem")
+    NSRoundLineCapStyle = getattr(appkit, "NSRoundLineCapStyle", 1)
     NSStatusBar = getattr(appkit, "NSStatusBar")
     NSTextField = getattr(appkit, "NSTextField")
     NSView = getattr(appkit, "NSView")
     NSVariableStatusItemLength = getattr(appkit, "NSVariableStatusItemLength")
     NSWorkspace = getattr(appkit, "NSWorkspace")
+    NSMakePoint = getattr(foundation, "NSMakePoint")
     NSMakeRect = getattr(foundation, "NSMakeRect")
     NSURL = getattr(foundation, "NSURL")
     NSObject = getattr(foundation, "NSObject")
@@ -68,7 +72,7 @@ def _run_cocoa_app(config: MenuBarConfig, runtime_options: MenuBarRuntimeOptions
         item.setTarget_(controller)
         controller.menu.addItem_(item)
 
-    content_width = 340.0
+    content_width = 360.0
 
     def add_view_item(menu: Any, view: Any) -> None:
         item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("", None, "")
@@ -106,7 +110,7 @@ def _run_cocoa_app(config: MenuBarConfig, runtime_options: MenuBarRuntimeOptions
 
         if card.shows_quota:
             add_usage_bar(view, "5h", card.primary_percent, card.primary_reset, 14, 52)
-            add_usage_bar(view, "Weekly", card.secondary_percent, card.secondary_reset, 176, 52)
+            add_usage_bar(view, "Weekly", card.secondary_percent, card.secondary_reset, 170, 52)
         else:
             platform_note = make_label("Platform fallback for compatible API routes", 11, False)
             platform_note.setTextColor_(NSColor.secondaryLabelColor())
@@ -125,7 +129,28 @@ def _run_cocoa_app(config: MenuBarConfig, runtime_options: MenuBarRuntimeOptions
         view.addSubview_(details)
         return view
 
-    def make_overview_view(rows: tuple[tuple[str, str], ...]) -> Any:
+    def make_quota_bars_header_view(controller: Any, *, can_show_donut: bool) -> Any:
+        width = content_width
+        height = 58.0
+        view = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, width, height))
+
+        heading = make_label("Progress Bars", 16, True)
+        heading.setFrame_(NSMakeRect(14, 28, 118, 22))
+        view.addSubview_(heading)
+
+        if can_show_donut:
+            add_toggle_button(view, controller, "Show Donut", width - 216, 28, button_width=96)
+        add_refresh_button(view, controller, width - 112, 28)
+        return view
+
+    def make_overview_view(
+        rows: tuple[tuple[str, str], ...],
+        donut: MenuBarDonutSummary | None,
+        controller: Any | None = None,
+    ) -> Any:
+        if donut is not None:
+            return make_primary_donut_view(donut, controller)
+
         row_map = dict(rows)
         width = content_width
         height = 126.0
@@ -155,6 +180,66 @@ def _run_cocoa_app(config: MenuBarConfig, runtime_options: MenuBarRuntimeOptions
         routing.setTextColor_(NSColor.secondaryLabelColor())
         routing.setFrame_(NSMakeRect(14, 6, width - 28, 14))
         view.addSubview_(routing)
+        return view
+
+    def make_primary_donut_view(donut: MenuBarDonutSummary, controller: Any | None) -> Any:
+        width = content_width
+        height = 196.0
+        view = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, width, height))
+
+        heading = make_label(donut.title, 16, True)
+        heading.setFrame_(NSMakeRect(14, 166, 180, 22))
+        view.addSubview_(heading)
+
+        if controller is not None:
+            add_toggle_button(view, controller, "Show Progress Bars", width - 142, 166)
+            add_refresh_button(view, controller, width - 112, 144)
+
+        colors = donut_segment_colors()
+        ring = OverviewDonutRingView.alloc().initWithDonut_colors_(donut, colors)
+        ring.setFrame_(NSMakeRect(16, 42, 112, 112))
+        view.addSubview_(ring)
+
+        center_label = make_label(donut.center_label, 10, True)
+        center_label.setAlignment_(2)
+        center_label.setTextColor_(NSColor.secondaryLabelColor())
+        center_label.setFrame_(NSMakeRect(35, 94, 74, 16))
+        view.addSubview_(center_label)
+
+        center_value = make_label(donut.center_value, 16, True)
+        center_value.setAlignment_(2)
+        center_value.setFrame_(NSMakeRect(35, 72, 74, 22))
+        view.addSubview_(center_value)
+
+        caption = make_label(donut.total_label, 12, False)
+        caption.setTextColor_(NSColor.secondaryLabelColor())
+        caption.setFrame_(NSMakeRect(20, 18, 126, 18))
+        view.addSubview_(caption)
+
+        legend_x = 148.0
+        value_x = width - 64.0
+        row_y = 124.0
+        row_step = 20.0
+        for index, segment in enumerate(donut.segments):
+            add_donut_legend_row(
+                view,
+                color=colors[index % len(colors)],
+                label=segment.label,
+                value=format_menu_number(segment.value),
+                x=legend_x,
+                value_x=value_x,
+                y=row_y - (index * row_step),
+            )
+
+        add_donut_legend_row(
+            view,
+            color=NSColor.systemGrayColor().colorWithAlphaComponent_(0.35),
+            label=donut.used_label,
+            value=format_menu_number(donut.used_value),
+            x=legend_x,
+            value_x=value_x,
+            y=row_y - (len(donut.segments) * row_step),
+        )
         return view
 
     def make_runtime_view(status: MenuBarRuntimeStatus, error: str) -> Any:
@@ -227,6 +312,57 @@ def _run_cocoa_app(config: MenuBarConfig, runtime_options: MenuBarRuntimeOptions
             value_view.setFrame_(NSMakeRect(x + 65, row_y, 78, 14))
             view.addSubview_(value_view)
 
+    class OverviewDonutRingView(NSView):
+        def initWithDonut_colors_(self, donut: MenuBarDonutSummary, colors: tuple[Any, ...]) -> Any:
+            self = objc_super(OverviewDonutRingView, self).initWithFrame_(NSMakeRect(0, 0, 112, 112))
+            if self is None:
+                return None
+            self.donut = donut
+            self.colors = colors
+            return self
+
+        def isOpaque(self) -> bool:
+            return False
+
+        def drawRect_(self, _rect: Any) -> None:
+            center = NSMakePoint(56.0, 56.0)
+            radius = 44.0
+            line_width = 16.0
+            donut = self.donut
+            total = max(float(donut.total_value), 1.0)
+
+            track = NSBezierPath.bezierPath()
+            track.appendBezierPathWithArcWithCenter_radius_startAngle_endAngle_clockwise_(
+                center,
+                radius,
+                0.0,
+                360.0,
+                False,
+            )
+            track.setLineWidth_(line_width)
+            NSColor.systemGrayColor().colorWithAlphaComponent_(0.25).setStroke()
+            track.stroke()
+
+            start_angle = 90.0
+            for index, segment in enumerate(donut.segments):
+                span = 360.0 * (max(0.0, float(segment.value)) / total)
+                if span <= 0:
+                    continue
+                end_angle = start_angle - span
+                arc = NSBezierPath.bezierPath()
+                arc.appendBezierPathWithArcWithCenter_radius_startAngle_endAngle_clockwise_(
+                    center,
+                    radius,
+                    start_angle,
+                    end_angle,
+                    True,
+                )
+                arc.setLineWidth_(line_width)
+                arc.setLineCapStyle_(NSRoundLineCapStyle)
+                self.colors[index % len(self.colors)].setStroke()
+                arc.stroke()
+                start_angle = end_angle
+
     def add_usage_bar(
         view: Any,
         label: str,
@@ -265,6 +401,52 @@ def _run_cocoa_app(config: MenuBarConfig, runtime_options: MenuBarRuntimeOptions
         reset_label.setTextColor_(NSColor.secondaryLabelColor())
         reset_label.setFrame_(NSMakeRect(x, y - 4, 142, 16))
         view.addSubview_(reset_label)
+
+    def add_donut_legend_row(
+        view: Any,
+        *,
+        color: Any,
+        label: str,
+        value: str,
+        x: float,
+        value_x: float,
+        y: float,
+    ) -> None:
+        swatch = NSView.alloc().initWithFrame_(NSMakeRect(x, y + 3, 10, 10))
+        swatch.setWantsLayer_(True)
+        swatch.layer().setCornerRadius_(5)
+        swatch.layer().setBackgroundColor_(color.CGColor())
+        view.addSubview_(swatch)
+
+        label_view = make_label(label, 13, True)
+        label_view.setFrame_(NSMakeRect(x + 18, y - 1, value_x - x - 22, 18))
+        view.addSubview_(label_view)
+
+        value_view = make_label(value, 13, False)
+        value_view.setAlignment_(1)
+        value_view.setTextColor_(NSColor.secondaryLabelColor())
+        value_view.setFrame_(NSMakeRect(value_x, y - 1, 50, 18))
+        view.addSubview_(value_view)
+
+    def add_refresh_button(view: Any, controller: Any, x: float, y: float) -> None:
+        refresh = NSButton.buttonWithTitle_target_action_("Refresh Now", controller, "refreshNow:")
+        refresh.setBordered_(False)
+        refresh.setFrame_(NSMakeRect(x, y, 104, 20))
+        view.addSubview_(refresh)
+
+    def add_toggle_button(
+        view: Any,
+        controller: Any,
+        title: str,
+        x: float,
+        y: float,
+        *,
+        button_width: float = 132,
+    ) -> None:
+        toggle = NSButton.buttonWithTitle_target_action_(title, controller, "toggleQuotaView:")
+        toggle.setBordered_(False)
+        toggle.setFrame_(NSMakeRect(x, y, button_width, 20))
+        view.addSubview_(toggle)
 
     def make_status_badge(status_label: str) -> Any:
         color = status_color(status_label)
@@ -306,6 +488,25 @@ def _run_cocoa_app(config: MenuBarConfig, runtime_options: MenuBarRuntimeOptions
             return NSColor.systemOrangeColor()
         return NSColor.systemRedColor()
 
+    def donut_segment_colors() -> tuple[Any, ...]:
+        return (
+            NSColor.systemBlueColor(),
+            NSColor.systemPurpleColor(),
+            NSColor.systemGreenColor(),
+            NSColor.systemOrangeColor(),
+            NSColor.systemPinkColor(),
+        )
+
+    def format_menu_number(value: float) -> str:
+        abs_value = abs(value)
+        if abs_value >= 1_000_000:
+            return f"{value / 1_000_000:.2f}".rstrip("0").rstrip(".") + "M"
+        if abs_value >= 1_000:
+            return f"{value / 1_000:.2f}".rstrip("0").rstrip(".") + "K"
+        if value.is_integer():
+            return str(int(value))
+        return f"{value:.2f}".rstrip("0").rstrip(".")
+
     def details_url(config: MenuBarConfig, card: AccountMenuCard) -> str:
         return config.base_url.rstrip("/") + card.details_path
 
@@ -329,6 +530,8 @@ def _run_cocoa_app(config: MenuBarConfig, runtime_options: MenuBarRuntimeOptions
             self._provider_sync_error = ""
             self._provider_sync_in_progress = False
             self._start_on_launch_attempted = False
+            self._quota_view_mode = "donut"
+            self._last_snapshot = None
             self.applySnapshot_(MenuBarSnapshot(title="5h --", rows=(("Status", "Loading..."),)))
             return self
 
@@ -416,20 +619,32 @@ def _run_cocoa_app(config: MenuBarConfig, runtime_options: MenuBarRuntimeOptions
 
             Thread(target=worker, daemon=True).start()
 
+        def toggleQuotaView_(self, _sender: object) -> None:
+            self._quota_view_mode = "bars" if self._quota_view_mode == "donut" else "donut"
+            if self._last_snapshot is not None:
+                self.applySnapshot_(self._last_snapshot)
+
         def quit_(self, _sender: object) -> None:
             NSApplication.sharedApplication().terminate_(None)
 
         def applySnapshot_(self, snapshot: MenuBarSnapshot) -> None:
             self._refresh_in_progress = False
+            self._last_snapshot = snapshot
             self.status_item.button().setTitle_(snapshot.title)
             self.menu.removeAllItems()
             self._detail_urls = []
-            for card in snapshot.account_cards:
-                add_view_item(self.menu, make_account_card_view(self, card, len(self._detail_urls)))
-                self._detail_urls.append(details_url(self.config, card))
-            if snapshot.account_cards:
-                self.menu.addItem_(NSMenuItem.separatorItem())
-            add_view_item(self.menu, make_overview_view(snapshot.rows))
+            can_show_donut = snapshot.primary_donut is not None
+            show_bars = self._quota_view_mode == "bars" or not can_show_donut
+            if show_bars:
+                add_view_item(self.menu, make_quota_bars_header_view(self, can_show_donut=can_show_donut))
+                for card in snapshot.account_cards:
+                    add_view_item(self.menu, make_account_card_view(self, card, len(self._detail_urls)))
+                    self._detail_urls.append(details_url(self.config, card))
+                if snapshot.account_cards:
+                    self.menu.addItem_(NSMenuItem.separatorItem())
+                add_view_item(self.menu, make_overview_view(snapshot.rows, None, self))
+            else:
+                add_view_item(self.menu, make_overview_view(snapshot.rows, snapshot.primary_donut, self))
             if self.runtime_options is not None:
                 self._runtime_status = status_from_options(self.runtime_options)
                 self.menu.addItem_(NSMenuItem.separatorItem())
@@ -442,7 +657,6 @@ def _run_cocoa_app(config: MenuBarConfig, runtime_options: MenuBarRuntimeOptions
             add_view_item(self.menu, make_provider_sync_view(self._provider_sync_status, self._provider_sync_error))
             add_action(self, "Sync Providers", "syncProviders:")
             self.menu.addItem_(NSMenuItem.separatorItem())
-            add_action(self, "Refresh Now", "refreshNow:")
             add_action(self, "Open Dashboard", "openDashboard:")
             self.menu.addItem_(NSMenuItem.separatorItem())
             add_action(self, "Quit", "quit:")

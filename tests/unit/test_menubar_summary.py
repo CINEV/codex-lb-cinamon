@@ -6,9 +6,11 @@ from app.menubar_summary import (
     build_account_cards,
     build_cookie_header,
     build_menu_bar_snapshot,
+    build_primary_donut_summary,
     build_unavailable_snapshot,
     count_account_statuses,
     format_compact_number,
+    format_donut_value,
     format_reset_label,
     remaining_percent,
 )
@@ -129,6 +131,100 @@ def test_build_menu_bar_snapshot_marks_current_account_from_recent_request_log()
     assert snapshot.account_cards[1].is_current is True
 
 
+def test_build_primary_donut_summary_matches_dashboard_remaining_breakdown() -> None:
+    summary = build_primary_donut_summary(
+        {
+            "summary": {
+                "primaryWindow": {
+                    "capacityCredits": 2480,
+                },
+            },
+            "windows": {
+                "primary": {
+                    "accounts": [
+                        {"accountId": "acc_plus", "remainingCredits": 1260},
+                        {"accountId": "acc_team", "remainingCredits": 222.75},
+                        {"accountId": "platform", "remainingCredits": 999},
+                    ],
+                },
+                "secondary": {
+                    "accounts": [
+                        {"accountId": "acc_plus", "remainingCredits": 2000},
+                        {"accountId": "acc_team", "remainingCredits": 500},
+                    ],
+                },
+            },
+        },
+        [
+            {
+                "accountId": "acc_plus",
+                "email": "dkfhddla@gmail.com",
+                "displayName": "",
+                "providerKind": "chatgpt_web",
+            },
+            {
+                "accountId": "acc_team",
+                "email": "jacob@vonvon.me",
+                "displayName": "Jacob",
+                "providerKind": "chatgpt_web",
+            },
+            {
+                "accountId": "platform",
+                "displayName": "시나몬",
+                "providerKind": "openai_platform",
+            },
+        ],
+    )
+
+    assert summary is not None
+    assert summary.title == "5h Remaining"
+    assert summary.center_value == "1.48K"
+    assert summary.total_label == "Total 2.48K · 40% used"
+    assert summary.used_value == 997.25
+    assert [segment.label for segment in summary.segments] == ["dkfhddla@gmail.com", "Jacob"]
+    assert [segment.value for segment in summary.segments] == [1260, 222.75]
+
+
+def test_build_primary_donut_summary_only_applies_secondary_constraint_with_percent() -> None:
+    summary = build_primary_donut_summary(
+        {
+            "summary": {
+                "primaryWindow": {
+                    "capacityCredits": 225,
+                },
+            },
+            "windows": {
+                "primary": {
+                    "accounts": [
+                        {"accountId": "acc_plus", "remainingCredits": 202.5},
+                    ],
+                },
+                "secondary": {
+                    "accounts": [
+                        {"accountId": "acc_plus", "remainingCredits": 0},
+                    ],
+                },
+            },
+        },
+        [
+            {
+                "accountId": "acc_plus",
+                "email": "plus@example.com",
+                "providerKind": "chatgpt_web",
+                "usage": {
+                    "primaryRemainingPercent": 90,
+                    "secondaryRemainingPercent": None,
+                },
+            },
+        ],
+    )
+
+    assert summary is not None
+    assert summary.center_value == "202.5"
+    assert summary.used_value == 22.5
+    assert [segment.value for segment in summary.segments] == [202.5]
+
+
 def test_unavailable_snapshot_keeps_5h_placeholder() -> None:
     snapshot = build_unavailable_snapshot("Authentication required")
 
@@ -226,3 +322,8 @@ def test_compact_number_formatting() -> None:
     assert format_compact_number(999) == "999"
     assert format_compact_number(1200) == "1.2K"
     assert format_compact_number(1_000_000) == "1M"
+
+
+def test_donut_value_formatting_keeps_fractional_credits() -> None:
+    assert format_donut_value(222.75) == "222.75"
+    assert format_donut_value(1482.75) == "1.48K"
