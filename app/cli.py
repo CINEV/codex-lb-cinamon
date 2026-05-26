@@ -180,9 +180,11 @@ def _run_menubar(args: argparse.Namespace) -> None:
         raise SystemExit("--refresh-interval must be greater than 0.")
     runtime_options = None
     base_url = args.base_url
+    verify_tls = True
     if args.manage_server:
         options = _serve_options_from_args(args)
         _validate_ssl_flags(options)
+        scheme = dashboard_scheme_for_options(options)
         runtime_options = MenuBarRuntimeOptions(
             host=options.host,
             port=options.port,
@@ -193,12 +195,14 @@ def _run_menubar(args: argparse.Namespace) -> None:
             startup_timeout_seconds=args.startup_timeout,
             start_on_launch=args.start_on_launch,
         )
-        base_url = dashboard_url(options.host, options.port, scheme=dashboard_scheme_for_options(options))
+        base_url = dashboard_url(options.host, options.port, scheme=scheme)
+        verify_tls = scheme != "https"
     run_menu_bar_app(
         MenuBarConfig(
             base_url=base_url,
             refresh_interval_seconds=args.refresh_interval,
             session_cookie=args.session_cookie,
+            verify_tls=verify_tls,
         ),
         runtime_options=runtime_options,
     )

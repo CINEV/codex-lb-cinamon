@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import io
 from datetime import datetime, timezone
 
 from app.menubar_summary import (
+    _request_json,
     build_account_cards,
     build_cookie_header,
     build_menu_bar_snapshot,
@@ -294,6 +296,31 @@ def test_account_card_details_path_url_encodes_account_id() -> None:
     )
 
     assert cards[0].details_path == "/accounts?selected=platform+account%26%EC%8B%9C%EB%82%98%EB%AA%AC"
+
+
+def test_request_json_can_disable_tls_verification_for_local_https(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_urlopen(request, *, timeout, context):
+        captured["url"] = request.full_url
+        captured["timeout"] = timeout
+        captured["context"] = context
+        return io.StringIO('{"ok": true}')
+
+    monkeypatch.setattr("app.menubar_summary.urlopen", fake_urlopen)
+
+    payload = _request_json(
+        "https://127.0.0.1:2455",
+        "/api/settings",
+        cookie_header=None,
+        timeout_seconds=2.0,
+        verify_tls=False,
+    )
+
+    assert payload == {"ok": True}
+    assert captured["url"] == "https://127.0.0.1:2455/api/settings"
+    assert captured["timeout"] == 2.0
+    assert captured["context"] is not None
 
 
 def test_reset_label_formats_relative_time() -> None:

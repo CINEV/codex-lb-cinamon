@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import ssl
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, cast
@@ -19,6 +20,7 @@ class MenuBarConfig:
     refresh_interval_seconds: int = 30
     session_cookie: str | None = None
     timeout_seconds: float = 5.0
+    verify_tls: bool = True
 
 
 @dataclass(frozen=True)
@@ -92,24 +94,28 @@ def fetch_menu_bar_snapshot(config: MenuBarConfig) -> MenuBarSnapshot:
             "/api/dashboard/overview?timeframe=7d",
             cookie_header=cookie_header,
             timeout_seconds=config.timeout_seconds,
+            verify_tls=config.verify_tls,
         )
         settings = _request_json(
             config.base_url,
             "/api/settings",
             cookie_header=cookie_header,
             timeout_seconds=config.timeout_seconds,
+            verify_tls=config.verify_tls,
         )
         accounts_payload = _request_json(
             config.base_url,
             "/api/accounts",
             cookie_header=cookie_header,
             timeout_seconds=config.timeout_seconds,
+            verify_tls=config.verify_tls,
         )
         request_logs_payload = _request_json(
             config.base_url,
             "/api/request-logs?limit=1&status=ok",
             cookie_header=cookie_header,
             timeout_seconds=config.timeout_seconds,
+            verify_tls=config.verify_tls,
         )
     except HTTPError as exc:
         return build_unavailable_snapshot(_http_error_message(exc))
@@ -527,13 +533,15 @@ def _request_json(
     *,
     cookie_header: str | None,
     timeout_seconds: float,
+    verify_tls: bool,
 ) -> dict[str, Any]:
     url = urljoin(base_url.rstrip("/") + "/", path.lstrip("/"))
     headers = {"Accept": "application/json"}
     if cookie_header:
         headers["Cookie"] = cookie_header
     request = Request(url, headers=headers)
-    with urlopen(request, timeout=timeout_seconds) as response:
+    context = ssl._create_unverified_context() if url.startswith("https://") and not verify_tls else None
+    with urlopen(request, timeout=timeout_seconds, context=context) as response:
         payload = json.load(response)
     if not isinstance(payload, dict):
         raise ValueError("Dashboard returned a non-object JSON payload")

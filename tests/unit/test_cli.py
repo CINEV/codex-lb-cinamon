@@ -188,6 +188,7 @@ def test_managed_menubar_uses_https_base_url_for_tls_runtime(monkeypatch, tmp_pa
     cli.main()
 
     assert captured["config"].base_url == "https://127.0.0.1:2555"
+    assert captured["config"].verify_tls is False
 
 
 def test_start_command_reports_background_runtime(monkeypatch, capsys, tmp_path):

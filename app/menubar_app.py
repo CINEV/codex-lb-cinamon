@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import sys
 import warnings
+from dataclasses import replace
 from threading import Thread
 from typing import Any, cast
 
@@ -35,6 +36,12 @@ def run_menu_bar_app(config: MenuBarConfig, *, runtime_options: MenuBarRuntimeOp
         raise SystemExit(
             "The macOS menu bar app requires PyObjC. Install dependencies with `uv sync` and try again."
         ) from exc
+
+
+def snapshot_config_for_runtime(config: MenuBarConfig, status: MenuBarRuntimeStatus | None) -> MenuBarConfig:
+    if status is None:
+        return config
+    return replace(config, base_url=status.dashboard_url)
 
 
 def _run_cocoa_app(config: MenuBarConfig, runtime_options: MenuBarRuntimeOptions | None) -> None:
@@ -585,7 +592,7 @@ def _run_cocoa_app(config: MenuBarConfig, runtime_options: MenuBarRuntimeOptions
                     if not status.running:
                         call_after(self.applySnapshot_, stopped_runtime_snapshot(status))
                         return
-                snapshot = fetch_menu_bar_snapshot(self.config)
+                snapshot = fetch_menu_bar_snapshot(snapshot_config_for_runtime(self.config, self._runtime_status))
                 call_after(self.applySnapshot_, snapshot)
 
             Thread(target=worker, daemon=True).start()
@@ -659,11 +666,12 @@ def _run_cocoa_app(config: MenuBarConfig, runtime_options: MenuBarRuntimeOptions
             self._detail_urls = []
             can_show_donut = snapshot.primary_donut is not None
             show_bars = self._quota_view_mode == "bars" or not can_show_donut
+            detail_config = snapshot_config_for_runtime(self.config, self._runtime_status)
             if show_bars:
                 add_view_item(self.menu, make_quota_bars_header_view(self, can_show_donut=can_show_donut))
                 for card in snapshot.account_cards:
                     add_view_item(self.menu, make_account_card_view(self, card, len(self._detail_urls)))
-                    self._detail_urls.append(details_url(self.config, card))
+                    self._detail_urls.append(details_url(detail_config, card))
                 if snapshot.account_cards:
                     self.menu.addItem_(NSMenuItem.separatorItem())
                 add_view_item(self.menu, make_overview_view(snapshot.rows, None, self))
