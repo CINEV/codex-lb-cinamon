@@ -281,6 +281,21 @@ def test_account_cards_include_openai_platform_metadata() -> None:
     assert card.details_path == "/accounts?selected=platform"
 
 
+def test_account_card_details_path_url_encodes_account_id() -> None:
+    cards = build_account_cards(
+        [
+            {
+                "accountId": "platform account&시나몬",
+                "displayName": "시나몬",
+                "providerKind": "openai_platform",
+                "status": "active",
+            },
+        ]
+    )
+
+    assert cards[0].details_path == "/accounts?selected=platform+account%26%EC%8B%9C%EB%82%98%EB%AA%AC"
+
+
 def test_reset_label_formats_relative_time() -> None:
     now = datetime(2026, 1, 1, 12, 35, tzinfo=timezone.utc)
 

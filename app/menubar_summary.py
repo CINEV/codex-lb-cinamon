@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, cast
 from urllib.error import HTTPError, URLError
-from urllib.parse import urljoin
+from urllib.parse import urlencode, urljoin
 from urllib.request import Request, urlopen
 
 from app import __version__
@@ -287,7 +287,7 @@ def build_account_cards(
                 secondary_percent=None if is_platform else remaining_percent(usage.get("secondaryRemainingPercent")),
                 primary_reset="--" if is_platform else format_reset_label(account.get("resetAtPrimary")),
                 secondary_reset="--" if is_platform else format_reset_label(account.get("resetAtSecondary")),
-                details_path=f"/accounts?selected={account_id}" if account_id else "/accounts",
+                details_path=f"/accounts?{urlencode({'selected': account_id})}" if account_id else "/accounts",
                 shows_quota=not is_platform,
                 is_current=account_matches_subject(account, current_subject_id),
             )

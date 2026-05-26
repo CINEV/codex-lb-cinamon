@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import signal
+import ssl
 import subprocess
 import sys
 import time
@@ -171,6 +172,7 @@ def start_background_server(
         metadata,
         timeout_seconds=startup_timeout_seconds,
         poll_process=lambda: process.poll(),
+        scheme=_healthcheck_scheme_for_options(options),
     ):
         terminate_process(metadata.pid)
         remove_runtime_metadata(resolved_pid_file)
@@ -184,9 +186,10 @@ def wait_for_server_ready(
     *,
     timeout_seconds: float,
     poll_process: Callable[[], int | None],
+    scheme: str = "http",
 ) -> bool:
     deadline = time.monotonic() + timeout_seconds
-    health_url = _healthcheck_url(metadata.host, metadata.port)
+    health_url = _healthcheck_url(metadata.host, metadata.port, scheme=scheme)
     while time.monotonic() < deadline:
         if poll_process() is not None:
             return False
@@ -197,8 +200,9 @@ def wait_for_server_ready(
 
 
 def healthcheck_ready(url: str) -> bool:
+    context = ssl._create_unverified_context() if url.startswith("https://") else None
     try:
-        with urlopen(url, timeout=0.5) as response:  # noqa: S310 - local readiness probe only
+        with urlopen(url, timeout=0.5, context=context) as response:  # noqa: S310 - local readiness probe only
             return response.status == 200
     except (HTTPError, URLError, TimeoutError):
         return False
@@ -249,7 +253,11 @@ def kill_process(pid: int) -> None:
         return
 
 
-def _healthcheck_url(host: str, port: int) -> str:
+def _healthcheck_scheme_for_options(options: ServeOptions) -> str:
+    return "https" if options.ssl_certfile and options.ssl_keyfile else "http"
+
+
+def _healthcheck_url(host: str, port: int, *, scheme: str = "http") -> str:
     probe_host = host
     if host in {"0.0.0.0", ""}:
         probe_host = "127.0.0.1"
@@ -258,4 +266,4 @@ def _healthcheck_url(host: str, port: int) -> str:
 
     if ":" in probe_host and not probe_host.startswith("["):
         probe_host = f"[{probe_host}]"
-    return f"http://{probe_host}:{port}/health/live"
+    return f"{scheme}://{probe_host}:{port}/health/live"

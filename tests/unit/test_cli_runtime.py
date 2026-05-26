@@ -67,7 +67,11 @@ def test_start_background_server_writes_runtime_metadata(monkeypatch, tmp_path: 
 
     monkeypatch.setattr(cli_runtime, "load_running_metadata", lambda path: (None, False))
     monkeypatch.setattr(cli_runtime.subprocess, "Popen", fake_popen)
-    monkeypatch.setattr(cli_runtime, "wait_for_server_ready", lambda metadata, timeout_seconds, poll_process: True)
+    monkeypatch.setattr(
+        cli_runtime,
+        "wait_for_server_ready",
+        lambda metadata, timeout_seconds, poll_process, scheme="http": True,
+    )
 
     metadata = cli_runtime.start_background_server(
         ServeOptions(host="127.0.0.1", port=2455, ssl_certfile=None, ssl_keyfile=None),
@@ -89,6 +93,40 @@ def test_start_background_server_writes_runtime_metadata(monkeypatch, tmp_path: 
         "--port",
         "2455",
     ]
+
+
+def test_start_background_server_uses_https_readiness_for_tls(monkeypatch, tmp_path: Path) -> None:
+    pid_file = tmp_path / "server.pid"
+    log_file = tmp_path / "server.log"
+    captured: dict[str, object] = {}
+
+    class FakeProcess:
+        pid = 7777
+
+        @staticmethod
+        def poll() -> int | None:
+            return None
+
+    monkeypatch.setattr(cli_runtime, "load_running_metadata", lambda path: (None, False))
+    monkeypatch.setattr(cli_runtime.subprocess, "Popen", lambda *args, **kwargs: FakeProcess())
+
+    def fake_wait_for_server_ready(metadata, *, timeout_seconds, poll_process, scheme="http"):
+        captured["scheme"] = scheme
+        return True
+
+    monkeypatch.setattr(cli_runtime, "wait_for_server_ready", fake_wait_for_server_ready)
+
+    cli_runtime.start_background_server(
+        ServeOptions(host="0.0.0.0", port=2455, ssl_certfile="cert.pem", ssl_keyfile="key.pem"),
+        pid_file=pid_file,
+        log_file=log_file,
+    )
+
+    assert captured["scheme"] == "https"
+
+
+def test_healthcheck_url_supports_https_loopback_fallback() -> None:
+    assert cli_runtime._healthcheck_url("0.0.0.0", 2455, scheme="https") == "https://127.0.0.1:2455/health/live"
 
 
 def test_shutdown_background_server_terminates_pid_and_cleans_metadata(monkeypatch, tmp_path: Path) -> None:
