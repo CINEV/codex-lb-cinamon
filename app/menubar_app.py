@@ -86,15 +86,16 @@ def _run_cocoa_app(config: MenuBarConfig, runtime_options: MenuBarRuntimeOptions
         view.setWantsLayer_(True)
         view.layer().setCornerRadius_(10)
         view.layer().setBorderWidth_(1)
-        view.layer().setBorderColor_(NSColor.separatorColor().colorWithAlphaComponent_(0.55).CGColor())
-        view.layer().setBackgroundColor_(NSColor.controlBackgroundColor().CGColor())
+        view.layer().setBorderColor_(card_border_color().CGColor())
+        view.layer().setBackgroundColor_(card_background_color().CGColor())
 
         title = make_label(card.title, 14, True)
+        title.setTextColor_(card_primary_text_color())
         title.setFrame_(NSMakeRect(14, 124, 190, 20))
         view.addSubview_(title)
 
         subtitle = make_label(card.subtitle, 12, False)
-        subtitle.setTextColor_(NSColor.secondaryLabelColor())
+        subtitle.setTextColor_(card_secondary_text_color())
         subtitle.setFrame_(NSMakeRect(14, 104, 150, 18))
         view.addSubview_(subtitle)
 
@@ -113,17 +114,18 @@ def _run_cocoa_app(config: MenuBarConfig, runtime_options: MenuBarRuntimeOptions
             add_usage_bar(view, "Weekly", card.secondary_percent, card.secondary_reset, 170, 52)
         else:
             platform_note = make_label("Platform fallback for compatible API routes", 11, False)
-            platform_note.setTextColor_(NSColor.secondaryLabelColor())
+            platform_note.setTextColor_(card_secondary_text_color())
             platform_note.setFrame_(NSMakeRect(14, 69, width - 28, 16))
             view.addSubview_(platform_note)
 
         separator = NSView.alloc().initWithFrame_(NSMakeRect(14, 39, width - 28, 1))
         separator.setWantsLayer_(True)
-        separator.layer().setBackgroundColor_(NSColor.separatorColor().colorWithAlphaComponent_(0.75).CGColor())
+        separator.layer().setBackgroundColor_(card_separator_color().CGColor())
         view.addSubview_(separator)
 
         details = NSButton.buttonWithTitle_target_action_("Details", controller, "openAccountDetails:")
         details.setBordered_(False)
+        style_card_button(details)
         details.setTag_(index)
         details.setFrame_(NSMakeRect(9, 9, 74, 22))
         view.addSubview_(details)
@@ -373,7 +375,7 @@ def _run_cocoa_app(config: MenuBarConfig, runtime_options: MenuBarRuntimeOptions
     ) -> None:
         color = quota_color(percent)
         text = make_label(label, 12, False)
-        text.setTextColor_(NSColor.secondaryLabelColor())
+        text.setTextColor_(card_secondary_text_color())
         text.setFrame_(NSMakeRect(x, y + 28, 70, 18))
         view.addSubview_(text)
 
@@ -398,7 +400,7 @@ def _run_cocoa_app(config: MenuBarConfig, runtime_options: MenuBarRuntimeOptions
             track.addSubview_(fill)
 
         reset_label = make_label(f"◷ {reset}", 11, False)
-        reset_label.setTextColor_(NSColor.secondaryLabelColor())
+        reset_label.setTextColor_(card_muted_text_color())
         reset_label.setFrame_(NSMakeRect(x, y - 4, 142, 16))
         view.addSubview_(reset_label)
 
@@ -469,6 +471,28 @@ def _run_cocoa_app(config: MenuBarConfig, runtime_options: MenuBarRuntimeOptions
         font = NSFont.boldSystemFontOfSize_(size) if bold else NSFont.systemFontOfSize_(size)
         label.setFont_(font)
         return label
+
+    def card_background_color() -> Any:
+        return NSColor.controlBackgroundColor()
+
+    def card_border_color() -> Any:
+        return NSColor.separatorColor().colorWithAlphaComponent_(0.55)
+
+    def card_primary_text_color() -> Any:
+        return NSColor.labelColor()
+
+    def card_secondary_text_color() -> Any:
+        return NSColor.secondaryLabelColor()
+
+    def card_muted_text_color() -> Any:
+        return NSColor.tertiaryLabelColor()
+
+    def card_separator_color() -> Any:
+        return NSColor.separatorColor().colorWithAlphaComponent_(0.75)
+
+    def style_card_button(button: Any) -> None:
+        if hasattr(button, "setContentTintColor_"):
+            button.setContentTintColor_(card_secondary_text_color())
 
     def status_color(status_label: str) -> Any:
         if status_label == "Active":
