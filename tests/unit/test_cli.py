@@ -153,6 +153,43 @@ def test_parse_args_accepts_managed_menubar_runtime_options(monkeypatch, tmp_pat
     assert args.startup_timeout == 4.5
 
 
+def test_managed_menubar_uses_https_base_url_for_tls_runtime(monkeypatch, tmp_path):
+    captured: dict[str, Any] = {}
+    pid_file = tmp_path / "server.pid"
+    log_file = tmp_path / "server.log"
+
+    def fake_run_menu_bar_app(config, *, runtime_options):
+        captured["config"] = config
+        captured["runtime_options"] = runtime_options
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "codex-lb-cinamon",
+            "menubar",
+            "--manage-server",
+            "--host",
+            "0.0.0.0",
+            "--port",
+            "2555",
+            "--ssl-certfile",
+            "cert.pem",
+            "--ssl-keyfile",
+            "key.pem",
+            "--pid-file",
+            str(pid_file),
+            "--log-file",
+            str(log_file),
+        ],
+    )
+    monkeypatch.setattr("app.menubar_app.run_menu_bar_app", fake_run_menu_bar_app)
+
+    cli.main()
+
+    assert captured["config"].base_url == "https://127.0.0.1:2555"
+
+
 def test_start_command_reports_background_runtime(monkeypatch, capsys, tmp_path):
     runtime = RuntimeMetadata(pid=4242, host="127.0.0.1", port=2455, log_file=str(tmp_path / "server.log"))
     pid_file = tmp_path / "server.pid"

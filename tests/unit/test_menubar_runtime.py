@@ -7,6 +7,8 @@ from app.cli_runtime import RuntimeMetadata
 from app.menubar_runtime import (
     MenuBarRuntimeOptions,
     dashboard_page_url,
+    dashboard_scheme_for_options,
+    dashboard_url,
     get_menu_bar_runtime_status,
     resolve_codex_provider_command,
     start_menu_bar_runtime,
@@ -92,6 +94,40 @@ def test_stopped_runtime_snapshot_reports_stopped_state(tmp_path: Path) -> None:
 def test_dashboard_page_url_points_to_spa_dashboard_route() -> None:
     assert dashboard_page_url("http://127.0.0.1:2455") == "http://127.0.0.1:2455/dashboard"
     assert dashboard_page_url("http://127.0.0.1:2455/") == "http://127.0.0.1:2455/dashboard"
+
+
+def test_dashboard_url_supports_https_and_loopback_fallback() -> None:
+    assert dashboard_url("0.0.0.0", 2455, scheme="https") == "https://127.0.0.1:2455"
+
+
+def test_dashboard_scheme_for_options_uses_https_for_tls_runtime(tmp_path: Path) -> None:
+    options = MenuBarRuntimeOptions(
+        host="127.0.0.1",
+        port=2455,
+        ssl_certfile="cert.pem",
+        ssl_keyfile="key.pem",
+        pid_file=tmp_path / "server.pid",
+        log_file=tmp_path / "server.log",
+        startup_timeout_seconds=3.0,
+        start_on_launch=False,
+    )
+
+    assert dashboard_scheme_for_options(options) == "https"
+
+
+def test_get_menu_bar_runtime_status_uses_dashboard_scheme(monkeypatch, tmp_path: Path) -> None:
+    metadata = RuntimeMetadata(pid=1234, host="0.0.0.0", port=2455, log_file=str(tmp_path / "server.log"))
+    monkeypatch.setattr("app.menubar_runtime.load_running_metadata", lambda pid_file: (metadata, False))
+
+    status = get_menu_bar_runtime_status(
+        pid_file=tmp_path / "server.pid",
+        log_file=tmp_path / "fallback.log",
+        default_host="127.0.0.1",
+        default_port=2455,
+        dashboard_scheme="https",
+    )
+
+    assert status.dashboard_url == "https://127.0.0.1:2455"
 
 
 def test_sync_codex_provider_runs_provider_sync(monkeypatch, tmp_path: Path) -> None:

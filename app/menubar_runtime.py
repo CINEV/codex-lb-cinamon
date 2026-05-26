@@ -62,6 +62,7 @@ def get_menu_bar_runtime_status(
     log_file: Path,
     default_host: str,
     default_port: int,
+    dashboard_scheme: str = "http",
 ) -> MenuBarRuntimeStatus:
     metadata, stale = load_running_metadata(pid_file)
     if metadata is None:
@@ -70,7 +71,7 @@ def get_menu_bar_runtime_status(
             pid=None,
             host=default_host,
             port=default_port,
-            dashboard_url=dashboard_url(default_host, default_port),
+            dashboard_url=dashboard_url(default_host, default_port, scheme=dashboard_scheme),
             log_file=log_file.expanduser(),
             stale_metadata_removed=stale,
         )
@@ -80,7 +81,7 @@ def get_menu_bar_runtime_status(
         pid=metadata.pid,
         host=metadata.host,
         port=metadata.port,
-        dashboard_url=dashboard_url(metadata.host, metadata.port),
+        dashboard_url=dashboard_url(metadata.host, metadata.port, scheme=dashboard_scheme),
         log_file=Path(metadata.log_file).expanduser(),
         stale_metadata_removed=stale,
     )
@@ -92,6 +93,7 @@ def status_from_options(options: MenuBarRuntimeOptions) -> MenuBarRuntimeStatus:
         log_file=options.log_file,
         default_host=options.host,
         default_port=options.port,
+        dashboard_scheme=dashboard_scheme_for_options(options),
     )
 
 
@@ -211,11 +213,15 @@ def stopped_runtime_snapshot(status: MenuBarRuntimeStatus) -> MenuBarSnapshot:
     )
 
 
-def dashboard_url(host: str, port: int) -> str:
+def dashboard_scheme_for_options(options: MenuBarRuntimeOptions | ServeOptions) -> str:
+    return "https" if options.ssl_certfile and options.ssl_keyfile else "http"
+
+
+def dashboard_url(host: str, port: int, *, scheme: str = "http") -> str:
     dashboard_host = "127.0.0.1" if host in {"", "0.0.0.0", "::"} else host
     if ":" in dashboard_host and not dashboard_host.startswith("["):
         dashboard_host = f"[{dashboard_host}]"
-    return f"http://{dashboard_host}:{port}"
+    return f"{scheme}://{dashboard_host}:{port}"
 
 
 def dashboard_page_url(base_url: str) -> str:

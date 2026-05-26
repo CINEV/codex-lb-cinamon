@@ -19,7 +19,7 @@ from app.cli_runtime import (
     start_background_server,
 )
 from app.core.runtime_logging import build_log_config
-from app.menubar_runtime import MenuBarRuntimeOptions, dashboard_url
+from app.menubar_runtime import MenuBarRuntimeOptions, dashboard_scheme_for_options, dashboard_url
 from app.menubar_summary import MenuBarConfig
 
 
@@ -193,7 +193,7 @@ def _run_menubar(args: argparse.Namespace) -> None:
             startup_timeout_seconds=args.startup_timeout,
             start_on_launch=args.start_on_launch,
         )
-        base_url = dashboard_url(options.host, options.port)
+        base_url = dashboard_url(options.host, options.port, scheme=dashboard_scheme_for_options(options))
     run_menu_bar_app(
         MenuBarConfig(
             base_url=base_url,
