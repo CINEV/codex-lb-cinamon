@@ -67,7 +67,7 @@ def _make_account(account_id: str, email: str, plan_type: str) -> Account:
 
 
 @pytest.mark.asyncio
-async def test_run_startup_migrations_preserves_unknown_plan_types(db_setup):
+async def test_run_startup_migrations_normalizes_plan_aliases(db_setup):
     async with SessionLocal() as session:
         repo = AccountsRepository(session)
         await repo.upsert(_make_account("acc_one", "one@example.com", "education"))
@@ -85,7 +85,7 @@ async def test_run_startup_migrations_preserves_unknown_plan_types(db_setup):
         assert acc_one is not None
         assert acc_two is not None
         assert acc_three is not None
-        assert acc_one.plan_type == "education"
+        assert acc_one.plan_type == "edu"
         assert acc_two.plan_type == "pro"
         assert acc_three.plan_type == DEFAULT_PLAN
 

@@ -272,10 +272,7 @@ def build_account_cards(
         provider_kind = _display_text(account.get("providerKind"))
         is_platform = provider_kind == "openai_platform"
         title = (
-            _display_text(account.get("displayName"))
-            or _display_text(account.get("email"))
-            or account_id
-            or "Account"
+            _display_text(account.get("displayName")) or _display_text(account.get("email")) or account_id or "Account"
         )
         plan_type = _display_text(account.get("planType"))
         status = _display_text(account.get("status")) or "unknown"
