@@ -30,6 +30,8 @@ describe("AccountActions", () => {
         onResume={() => {}}
         onDelete={() => {}}
         onReauth={() => {}}
+        onExport={() => {}}
+        onLimitWarmupChange={() => {}}
       />,
     );
 
@@ -56,6 +58,8 @@ describe("AccountActions", () => {
         onResume={() => {}}
         onDelete={() => {}}
         onReauth={() => {}}
+        onExport={() => {}}
+        onLimitWarmupChange={() => {}}
       />,
     );
 

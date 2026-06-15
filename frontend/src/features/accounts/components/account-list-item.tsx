@@ -3,10 +3,17 @@ import { isEmailLabel } from "@/components/blur-email";
 import { usePrivacyStore } from "@/hooks/use-privacy";
 import { useAccountQuotaDisplayStore } from "@/hooks/use-account-quota-display";
 import { StatusBadge } from "@/components/status-badge";
+import { MiniQuotaBar } from "@/components/mini-quota-bar";
 import type { AccountSummary } from "@/features/accounts/schemas";
-import { normalizeStatus, quotaBarColor, quotaBarTrack } from "@/utils/account-status";
+import { normalizeStatus } from "@/utils/account-status";
 import { formatCompactAccountId } from "@/utils/account-identifiers";
-import { formatPercentNullable, formatProviderLabel, formatQuotaResetLabel, formatSlug } from "@/utils/formatters";
+import {
+  formatDateTimeInline,
+  formatPercentNullable,
+  formatProviderLabel,
+  formatQuotaResetLabel,
+  formatSlug,
+} from "@/utils/formatters";
 
 export type AccountListItemProps = {
   account: AccountSummary;
@@ -20,22 +27,6 @@ function formatAccountListSubtitle(account: AccountSummary): string {
     return `${formatProviderLabel(account.providerKind)} API key`;
   }
   return formatSlug(account.planType);
-}
-
-function MiniQuotaBar({ percent, testId }: { percent: number | null; testId: string }) {
-  if (percent === null) {
-    return <div data-testid={testId} className="h-1 flex-1 overflow-hidden rounded-full bg-muted" />;
-  }
-  const clamped = Math.max(0, Math.min(100, percent));
-  return (
-    <div data-testid={testId} className={cn("h-1 flex-1 overflow-hidden rounded-full", quotaBarTrack(clamped))}>
-      <div
-        data-testid={`${testId}-fill`}
-        className={cn("h-full rounded-full", quotaBarColor(clamped))}
-        style={{ width: `${clamped}%` }}
-      />
-    </div>
-  );
 }
 
 export function AccountListItem({ account, selected, showAccountId = false, onSelect }: AccountListItemProps) {
@@ -60,6 +51,10 @@ export function AccountListItem({ account, selected, showAccountId = false, onSe
   const showPrimaryRow = hasPrimaryWindow && (quotaDisplay !== "weekly" || !hasSecondaryWindow);
   const showSecondaryRow = hasSecondaryWindow && (quotaDisplay !== "5h" || !hasPrimaryWindow);
   const visibleQuotaRows = Number(showPrimaryRow) + Number(showSecondaryRow);
+  const warmupLabel = account.limitWarmupEnabled ? "Warm-up on" : "Warm-up off";
+  const warmupMeta = account.limitWarmup
+    ? `${formatSlug(account.limitWarmup.status)} | ${formatDateTimeInline(account.limitWarmup.completedAt ?? account.limitWarmup.attemptedAt)}`
+    : "No attempts";
 
   return (
     <button
@@ -95,6 +90,10 @@ export function AccountListItem({ account, selected, showAccountId = false, onSe
         {showPrimaryRow ? <MiniQuotaRow label="5h" percent={primary} resetAt={account.resetAtPrimary} /> : null}
         {showSecondaryRow ? <MiniQuotaRow label="Weekly" percent={secondary} resetAt={account.resetAtSecondary} /> : null}
       </div>
+      <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
+        <span>{warmupLabel}</span>
+        <span className="truncate">{warmupMeta}</span>
+      </div>
     </button>
   );
 }
@@ -114,7 +113,11 @@ function MiniQuotaRow({
         <span className="text-muted-foreground">{label}</span>
         <span className="tabular-nums font-medium">{formatPercentNullable(percent)}</span>
       </div>
-      <MiniQuotaBar percent={percent} testId={`mini-quota-track-${label.toLowerCase()}`} />
+      <MiniQuotaBar
+        aria-label={`${label} credits remaining`}
+        percent={percent}
+        testId={`mini-quota-track-${label.toLowerCase()}`}
+      />
       <div className="text-[10px] text-muted-foreground">{formatMiniQuotaResetLabel(resetAt ?? null)}</div>
     </div>
   );

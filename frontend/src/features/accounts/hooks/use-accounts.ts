@@ -4,11 +4,14 @@ import { toast } from "sonner";
 import {
   createPlatformIdentity,
   deleteAccount,
+  exportAccount,
   getAccountTrends,
   importAccount,
   listAccounts,
   pauseAccount,
   reactivateAccount,
+  setAccountAlias,
+  updateAccountLimitWarmup,
   updatePlatformIdentity,
 } from "@/features/accounts/api";
 import type { PlatformIdentityUpdateRequest } from "@/features/accounts/schemas";
@@ -87,6 +90,18 @@ export function useAccountMutations() {
     },
   });
 
+  const setAliasMutation = useMutation({
+    mutationFn: ({ accountId, alias }: { accountId: string; alias: string | null }) =>
+      setAccountAlias(accountId, alias),
+    onSuccess: () => {
+      toast.success("Account alias updated");
+      invalidateAccountRelatedQueries(queryClient);
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Alias update failed");
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: deleteAccount,
     onSuccess: () => {
@@ -98,13 +113,47 @@ export function useAccountMutations() {
     },
   });
 
+  const exportMutation = useMutation({
+    mutationFn: exportAccount,
+    onSuccess: (data) => {
+      const blob = new Blob([data.authJson], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "auth.json";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success("Account exported");
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Export failed");
+    },
+  });
+
+  const limitWarmupMutation = useMutation({
+    mutationFn: ({ accountId, enabled }: { accountId: string; enabled: boolean }) =>
+      updateAccountLimitWarmup(accountId, enabled),
+    onSuccess: (data) => {
+      toast.success(data.enabled ? "Limit warm-up enabled" : "Limit warm-up disabled");
+      invalidateAccountRelatedQueries(queryClient);
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Limit warm-up update failed");
+    },
+  });
+
   return {
     importMutation,
     createPlatformMutation,
     updatePlatformMutation,
     pauseMutation,
     resumeMutation,
+    setAliasMutation,
     deleteMutation,
+    exportMutation,
+    limitWarmupMutation,
   };
 }
 

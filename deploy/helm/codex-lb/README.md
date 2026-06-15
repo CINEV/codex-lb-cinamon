@@ -15,7 +15,9 @@ docker run -d --name codex-lb \
 
 Helm 템플릿과 값 파일은 저장소에 남아 있지만, 이 포크에서는 Helm/Kubernetes 배포 절차를 최신 기준으로 보장하지 않습니다. 차트 자체를 참고해야 한다면 `deploy/helm/codex-lb/` 아래 템플릿과 values 파일을 직접 확인하세요.
 
-차트 메타데이터의 최소 Kubernetes 버전은 `1.32`입니다. CI의 차트 검증은 `1.35` 렌더링 기준을 사용합니다.
+차트 메타데이터의 지원 정책은 Kubernetes 1.32+입니다.
+Validation baseline in CI and smoke installs: `1.35`.
+이 포크에서는 컨테이너 배포를 권장하지만, Helm 차트는 이 최소 버전과 CI 기준을 유지합니다.
 
 `values-prod.yaml`은 External Secrets 모드를 켭니다. 이 overlay를 직접 렌더링하거나 배포할 때는 운영 환경의 SecretStore 또는 ClusterSecretStore 이름을 반드시 전달해야 합니다.
 

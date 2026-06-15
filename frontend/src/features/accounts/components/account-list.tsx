@@ -58,6 +58,8 @@ export function AccountList({
       return (
         account.email.toLowerCase().includes(needle) ||
         (account.label ?? "").toLowerCase().includes(needle) ||
+        (account.alias?.toLowerCase().includes(needle) ?? false) ||
+        account.displayName.toLowerCase().includes(needle) ||
         account.accountId.toLowerCase().includes(needle) ||
         account.planType.toLowerCase().includes(needle) ||
         (account.providerKind ?? "").toLowerCase().includes(needle) ||

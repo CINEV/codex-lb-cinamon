@@ -31,7 +31,10 @@ export function AccountsPage() {
     updatePlatformMutation,
     pauseMutation,
     resumeMutation,
+    setAliasMutation,
     deleteMutation,
+    exportMutation,
+    limitWarmupMutation,
   } = useAccounts();
   const oauth = useOauth();
 
@@ -91,7 +94,10 @@ export function AccountsPage() {
     updatePlatformMutation.isPending ||
     pauseMutation.isPending ||
     resumeMutation.isPending ||
-    deleteMutation.isPending;
+    setAliasMutation.isPending ||
+    deleteMutation.isPending ||
+    exportMutation.isPending ||
+    limitWarmupMutation.isPending;
 
   const mutationError =
     getErrorMessageOrNull(importMutation.error) ||
@@ -99,7 +105,10 @@ export function AccountsPage() {
     getErrorMessageOrNull(updatePlatformMutation.error) ||
     getErrorMessageOrNull(pauseMutation.error) ||
     getErrorMessageOrNull(resumeMutation.error) ||
-    getErrorMessageOrNull(deleteMutation.error);
+    getErrorMessageOrNull(setAliasMutation.error) ||
+    getErrorMessageOrNull(deleteMutation.error) ||
+    getErrorMessageOrNull(exportMutation.error) ||
+    getErrorMessageOrNull(limitWarmupMutation.error);
   const editingPlatformAccount =
     platformEditDialog.data?.providerKind === "openai_platform" ? platformEditDialog.data : null;
 
@@ -139,8 +148,13 @@ export function AccountsPage() {
             onEditPlatform={(account) => platformEditDialog.show(account)}
             onPause={(accountId) => void pauseMutation.mutateAsync(accountId)}
             onResume={(accountId) => void resumeMutation.mutateAsync(accountId)}
+            onSetAlias={(accountId, alias) => setAliasMutation.mutateAsync({ accountId, alias })}
             onDelete={(accountId) => deleteDialog.show(accountId)}
             onReauth={() => oauthDialog.show()}
+            onExport={(accountId) => void exportMutation.mutateAsync(accountId)}
+            onLimitWarmupChange={(accountId, enabled) =>
+              void limitWarmupMutation.mutateAsync({ accountId, enabled })
+            }
           />
         </div>
       )}

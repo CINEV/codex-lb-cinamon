@@ -243,7 +243,7 @@ def _auto_detect_host_gateway_networks() -> tuple[IPv4Network | IPv6Network, ...
 
 def _insecure_allow_remote_no_auth_host_networks() -> tuple[IPv4Network | IPv6Network, ...]:
     settings = get_settings()
-    configured = settings.insecure_allow_remote_no_auth_host_cidrs
+    configured = getattr(settings, "insecure_allow_remote_no_auth_host_cidrs", "")
     if configured:
         return parse_trusted_proxy_networks(configured)
     return _auto_detect_host_gateway_networks()

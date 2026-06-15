@@ -49,6 +49,7 @@ async def test_add_log_ignores_closed_transaction(async_session: AsyncSession, m
         latency_ms=1,
         status="success",
         error_code=None,
+        plan_type="plus",
     )
 
     assert log.request_id == "req"

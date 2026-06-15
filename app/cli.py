@@ -26,6 +26,16 @@ def _add_serve_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--port", type=int, default=int(os.getenv("PORT", "2455")))
     parser.add_argument("--ssl-certfile", default=os.getenv("SSL_CERTFILE"))
     parser.add_argument("--ssl-keyfile", default=os.getenv("SSL_KEYFILE"))
+    parser.add_argument(
+        "--timeout-keep-alive",
+        type=int,
+        default=int(os.getenv("UVICORN_TIMEOUT_KEEP_ALIVE", "7200")),
+        help=(
+            "Seconds to keep idle HTTP connections open. Codex CLI reuses local "
+            "connections for large compact POSTs; short keepalive windows can leave the "
+            "client writing to a stale socket before the request reaches the app."
+        ),
+    )
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -66,6 +76,7 @@ def _serve_options_from_args(args: argparse.Namespace) -> ServeOptions:
         port=args.port,
         ssl_certfile=args.ssl_certfile,
         ssl_keyfile=args.ssl_keyfile,
+        timeout_keep_alive=args.timeout_keep_alive,
     )
 
 
@@ -83,6 +94,7 @@ def _run_foreground(options: ServeOptions) -> None:
         port=options.port,
         ssl_certfile=options.ssl_certfile,
         ssl_keyfile=options.ssl_keyfile,
+        timeout_keep_alive=options.timeout_keep_alive,
         log_config=build_log_config(),
     )
 

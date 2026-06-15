@@ -33,7 +33,10 @@ const EXPECTED_ENDPOINTS = [
 	"PATCH /api/accounts/platform/:accountId",
 	"POST /api/accounts/:accountId/pause",
 	"POST /api/accounts/:accountId/reactivate",
+	"PUT /api/accounts/:accountId/alias",
+	"PUT /api/accounts/:accountId/limit-warmup",
 	"GET /api/accounts/:accountId/trends",
+	"POST /api/accounts/:accountId/export",
 	"DELETE /api/accounts/:accountId",
 	// oauth
 	"POST /api/oauth/start",

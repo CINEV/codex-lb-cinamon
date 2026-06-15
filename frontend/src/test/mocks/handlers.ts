@@ -50,6 +50,7 @@ const OauthStartPayloadSchema = z
 const ApiKeyCreatePayloadSchema = z
 	.object({
 		name: z.string().optional(),
+		assignedAccountIds: z.array(z.string()).optional(),
 	})
 	.passthrough();
 
@@ -78,6 +79,10 @@ const ApiKeyUpdatePayloadSchema = z
 			.optional(),
 	})
 	.passthrough();
+
+const AccountAliasPayloadSchema = z.object({
+	alias: z.string().max(255).nullable(),
+});
 
 const SettingsPayloadSchema = z
 	.object({
@@ -524,6 +529,45 @@ export const handlers = [
 		return HttpResponse.json({ status: "reactivated" });
 	}),
 
+	http.put("/api/accounts/:accountId/alias", async ({ params, request }) => {
+		const accountId = String(params.accountId);
+		const account = findAccount(accountId);
+		if (!account) {
+			return HttpResponse.json(
+				{ error: { code: "account_not_found", message: "Account not found" } },
+				{ status: 404 },
+			);
+		}
+		const payload = await parseJsonBody(request, AccountAliasPayloadSchema);
+		if (!payload) {
+			return HttpResponse.json(
+				{ error: { code: "validation_error", message: "Invalid alias payload" } },
+				{ status: 422 },
+			);
+		}
+		const normalized = typeof payload.alias === "string" ? payload.alias.trim() : null;
+		account.alias = normalized === "" ? null : normalized;
+		account.displayName = account.alias ?? account.email;
+		return HttpResponse.json({ accountId, alias: account.alias });
+	}),
+
+	http.put("/api/accounts/:accountId/limit-warmup", async ({ params, request }) => {
+		const accountId = String(params.accountId);
+		const account = findAccount(accountId);
+		if (!account) {
+			return HttpResponse.json(
+				{ error: { code: "account_not_found", message: "Account not found" } },
+				{ status: 404 },
+			);
+		}
+		const body = await request.json().catch(() => ({}));
+		const enabled = typeof body === "object" && body !== null && "enabled" in body
+			? Boolean((body as { enabled?: unknown }).enabled)
+			: false;
+		account.limitWarmupEnabled = enabled;
+		return HttpResponse.json({ status: enabled ? "enabled" : "disabled", enabled });
+	}),
+
 	http.get("/api/accounts/:accountId/trends", ({ params }) => {
 		const accountId = String(params.accountId);
 		const account = findAccount(accountId);
@@ -534,6 +578,38 @@ export const handlers = [
 			);
 		}
 		return HttpResponse.json(createAccountTrends(accountId));
+	}),
+
+	http.post("/api/accounts/:accountId/export", ({ params }) => {
+		const accountId = String(params.accountId);
+		const account = findAccount(accountId);
+		if (!account) {
+			return HttpResponse.json(
+				{ error: { code: "account_not_found", message: "Account not found" } },
+				{ status: 404 },
+			);
+		}
+		return HttpResponse.json({
+			accountId: account.accountId,
+			email: account.email,
+			planType: account.planType,
+			status: account.status,
+			authJson: JSON.stringify(
+				{
+					auth_mode: "chatgpt",
+					OPENAI_API_KEY: null,
+					tokens: {
+						id_token: "id-token",
+						access_token: "access-token",
+						refresh_token: "refresh-token",
+						account_id: accountId,
+					},
+					last_refresh: "2026-01-01T12:00:00.000000Z",
+				},
+				null,
+				2,
+			),
+		});
 	}),
 
 	http.delete("/api/accounts/:accountId", ({ params }) => {
@@ -933,6 +1009,8 @@ export const handlers = [
 			...createApiKey({
 				id: `key_${sequence}`,
 				name: payload?.name ?? `API Key ${sequence}`,
+				accountAssignmentScopeEnabled: (payload?.assignedAccountIds?.length ?? 0) > 0,
+				assignedAccountIds: payload?.assignedAccountIds ?? [],
 			}),
 			key: `sk-test-generated-${sequence}`,
 		});

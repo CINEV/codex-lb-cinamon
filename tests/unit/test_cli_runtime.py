@@ -14,7 +14,13 @@ pytestmark = pytest.mark.unit
 def test_build_serve_command_includes_explicit_serve_subcommand() -> None:
     command = cli_runtime.build_serve_command(
         "/tmp/python",
-        ServeOptions(host="127.0.0.1", port=2455, ssl_certfile="cert.pem", ssl_keyfile="key.pem"),
+        ServeOptions(
+            host="127.0.0.1",
+            port=2455,
+            ssl_certfile="cert.pem",
+            ssl_keyfile="key.pem",
+            timeout_keep_alive=7200,
+        ),
     )
 
     assert command == [
@@ -30,6 +36,8 @@ def test_build_serve_command_includes_explicit_serve_subcommand() -> None:
         "cert.pem",
         "--ssl-keyfile",
         "key.pem",
+        "--timeout-keep-alive",
+        "7200",
     ]
 
 
@@ -70,7 +78,7 @@ def test_start_background_server_writes_runtime_metadata(monkeypatch, tmp_path: 
     monkeypatch.setattr(cli_runtime, "wait_for_server_ready", lambda metadata, timeout_seconds, poll_process: True)
 
     metadata = cli_runtime.start_background_server(
-        ServeOptions(host="127.0.0.1", port=2455, ssl_certfile=None, ssl_keyfile=None),
+        ServeOptions(host="127.0.0.1", port=2455, ssl_certfile=None, ssl_keyfile=None, timeout_keep_alive=7200),
         pid_file=pid_file,
         log_file=log_file,
     )
@@ -88,6 +96,8 @@ def test_start_background_server_writes_runtime_metadata(monkeypatch, tmp_path: 
         "127.0.0.1",
         "--port",
         "2455",
+        "--timeout-keep-alive",
+        "7200",
     ]
 
 
