@@ -81,7 +81,7 @@ export function AccountDetail({
         <p className="mt-1 text-xs text-muted-foreground">{providerLabel}</p>
       </div>
 
-      <AccountAliasForm account={account} busy={busy} onSetAlias={onSetAlias} />
+      {!isPlatformIdentity ? <AccountAliasForm account={account} busy={busy} onSetAlias={onSetAlias} /> : null}
       {isPlatformIdentity ? (
         <PlatformIdentityPanel account={account} />
       ) : (

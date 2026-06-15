@@ -42,6 +42,34 @@ describe("AccountActions", () => {
     expect(onEditPlatform).toHaveBeenCalledWith(account);
   });
 
+  it("hides ChatGPT account-only actions for platform identities", () => {
+    render(
+      <AccountActions
+        account={createAccountSummary({
+          accountId: "platform_1",
+          email: "Platform Key",
+          displayName: "Platform Key",
+          planType: "openai_platform",
+          providerKind: "openai_platform",
+          routingSubjectId: "platform_1",
+          usage: null,
+          auth: null,
+        })}
+        busy={false}
+        onEditPlatform={() => {}}
+        onPause={() => {}}
+        onResume={() => {}}
+        onDelete={() => {}}
+        onReauth={() => {}}
+        onExport={() => {}}
+        onLimitWarmupChange={() => {}}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /warm-up/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Export" })).not.toBeInTheDocument();
+  });
+
   it("keeps Re-authenticate reserved for deactivated ChatGPT-web accounts", () => {
     render(
       <AccountActions

@@ -26,7 +26,7 @@ export function AccountActions({
   onExport,
   onLimitWarmupChange,
 }: AccountActionsProps) {
-  const supportsReauth = account.providerKind !== "openai_platform";
+  const supportsChatGptAccountActions = account.providerKind !== "openai_platform";
   const supportsPlatformEdit = account.providerKind === "openai_platform";
 
   return (
@@ -70,7 +70,7 @@ export function AccountActions({
         </Button>
       )}
 
-      {supportsReauth && account.status === "deactivated" ? (
+      {supportsChatGptAccountActions && account.status === "deactivated" ? (
         <Button
           type="button"
           size="sm"
@@ -84,29 +84,33 @@ export function AccountActions({
         </Button>
       ) : null}
 
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        className="h-8 gap-1.5 text-xs"
-        onClick={() => onLimitWarmupChange(account.accountId, !account.limitWarmupEnabled)}
-        disabled={busy}
-      >
-        <Zap className="h-3.5 w-3.5" />
-        {account.limitWarmupEnabled ? "Disable warm-up" : "Enable warm-up"}
-      </Button>
+      {supportsChatGptAccountActions ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-8 gap-1.5 text-xs"
+          onClick={() => onLimitWarmupChange(account.accountId, !account.limitWarmupEnabled)}
+          disabled={busy}
+        >
+          <Zap className="h-3.5 w-3.5" />
+          {account.limitWarmupEnabled ? "Disable warm-up" : "Enable warm-up"}
+        </Button>
+      ) : null}
 
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        className="h-8 gap-1.5 text-xs"
-        onClick={() => onExport(account.accountId)}
-        disabled={busy}
-      >
-        <Download className="h-3.5 w-3.5" />
-        Export
-      </Button>
+      {supportsChatGptAccountActions ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-8 gap-1.5 text-xs"
+          onClick={() => onExport(account.accountId)}
+          disabled={busy}
+        >
+          <Download className="h-3.5 w-3.5" />
+          Export
+        </Button>
+      ) : null}
 
       <Button
         type="button"
