@@ -124,7 +124,7 @@ jobs:
 
     environment:
       name: pypi
-      url: https://pypi.org/project/codex-lb/
+      url: https://pypi.org/project/codex-lb-cinamon/
 
     steps:
       - name: Download dist artifacts
@@ -364,11 +364,11 @@ jobs:
             echo "## Install / Run"
             echo '```bash'
             if [ "${IS_PRERELEASE}" = "true" ]; then
-              echo "uvx --from \"codex-lb==${PYPI_VERSION}\" codex-lb"
+              echo "uvx --from \"codex-lb-cinamon==${PYPI_VERSION}\" codex-lb-cinamon"
               echo "docker pull ghcr.io/${GITHUB_REPOSITORY}:${TAG_VERSION}"
               echo "helm install codex-lb oci://ghcr.io/soju06/charts/codex-lb --version ${TAG_VERSION} --devel"
             else
-              echo 'uvx codex-lb'
+              echo 'uvx codex-lb-cinamon'
               echo "docker pull ghcr.io/${GITHUB_REPOSITORY}:${TAG_VERSION}"
               echo "helm install codex-lb oci://ghcr.io/soju06/charts/codex-lb --version ${TAG_VERSION}"
             fi
