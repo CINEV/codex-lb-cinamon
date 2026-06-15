@@ -13,6 +13,7 @@ from sqlalchemy.sql import Insert
 
 from app.core.utils.time import to_utc_naive, utcnow
 from app.db.models import Account, OpenAIPlatformIdentity, StickySession, StickySessionKind
+from app.db.session import sqlite_writer_section
 from app.modules.sticky_sessions.schemas import StickySessionSortBy, StickySessionSortDir
 from app.modules.upstream_identities.types import CHATGPT_WEB_PROVIDER_KIND, OPENAI_PLATFORM_PROVIDER_KIND
 
@@ -118,8 +119,9 @@ class StickySessionsRepository:
             routing_subject_id=routing_subject_id,
             account_id=account_id if provider_kind == CHATGPT_WEB_PROVIDER_KIND else None,
         )
-        await self._session.execute(statement)
-        await self._session.commit()
+        async with sqlite_writer_section():
+            await self._session.execute(statement)
+            await self._session.commit()
         row = await self.get_scoped_entry(key, kind=kind, provider_kind=provider_kind)
         if row is None:
             raise RuntimeError(
@@ -139,8 +141,9 @@ class StickySessionsRepository:
             StickySession.kind == kind,
             StickySession.provider_kind == provider_kind,
         )
-        result = await self._session.execute(statement.returning(StickySession.key))
-        await self._session.commit()
+        async with sqlite_writer_section():
+            result = await self._session.execute(statement.returning(StickySession.key))
+            await self._session.commit()
         return result.scalar_one_or_none() is not None
 
     async def delete_entries(
@@ -169,10 +172,11 @@ class StickySessionsRepository:
                 )
             )
         )
-        result = await self._session.execute(
-            statement.returning(StickySession.key, StickySession.kind, StickySession.provider_kind)
-        )
-        await self._session.commit()
+        async with sqlite_writer_section():
+            result = await self._session.execute(
+                statement.returning(StickySession.key, StickySession.kind, StickySession.provider_kind)
+            )
+            await self._session.commit()
         return [(key, kind, provider_kind) for key, kind, provider_kind in result.all()]
 
     async def delete_by_routing_subject(
@@ -348,9 +352,10 @@ class StickySessionsRepository:
         stmt = delete(StickySession).where(StickySession.updated_at < to_utc_naive(cutoff))
         if kind is not None:
             stmt = stmt.where(StickySession.kind == kind)
-        result = await self._session.execute(stmt.returning(StickySession.key))
-        deleted = len(result.scalars().all())
-        await self._session.commit()
+        async with sqlite_writer_section():
+            result = await self._session.execute(stmt.returning(StickySession.key))
+            deleted = len(result.scalars().all())
+            await self._session.commit()
         return deleted
 
     def _build_upsert_statement(

@@ -26,6 +26,7 @@ from app.modules.accounts.repository import AccountRequestUsageSummary, Accounts
 from app.modules.accounts.schemas import (
     AccountAdditionalQuota,
     AccountAdditionalWindow,
+    AccountExportResponse,
     AccountImportResponse,
     AccountRequestUsage,
     AccountSummary,
@@ -33,6 +34,7 @@ from app.modules.accounts.schemas import (
     PlatformIdentityCreateRequest,
     PlatformIdentityUpdateRequest,
 )
+from app.modules.limit_warmup.repository import LimitWarmupRepository
 from app.modules.proxy.account_cache import get_account_selection_cache
 from app.modules.proxy.provider_adapters import OpenAIPlatformProviderAdapter
 from app.modules.upstream_identities.repository import (
@@ -79,6 +81,7 @@ class AccountsService:
         repo: AccountsRepository,
         usage_repo: UsageRepository | None = None,
         additional_usage_repo: AdditionalUsageRepository | AdditionalUsageRepositoryPort | None = None,
+        limit_warmup_repo: LimitWarmupRepository | None = None,
         *,
         platform_service: OpenAIPlatformIdentitiesService | None = None,
     ) -> None:
@@ -86,6 +89,7 @@ class AccountsService:
         self._usage_repo = usage_repo
         self._additional_usage_repo = additional_usage_repo
         self._platform_service = platform_service
+        self._limit_warmup_repo = limit_warmup_repo
         self._usage_updater = UsageUpdater(usage_repo, repo, additional_usage_repo) if usage_repo else None
         self._encryptor = TokenEncryptor()
         self._platform_adapter = OpenAIPlatformProviderAdapter()
@@ -113,6 +117,9 @@ class AccountsService:
         primary_usage = await self._usage_repo.latest_by_account(window="primary") if self._usage_repo else {}
         secondary_usage = await self._usage_repo.latest_by_account(window="secondary") if self._usage_repo else {}
         request_usage_rows = await self._repo.list_request_usage_summary_by_subject(routing_subject_ids)
+        limit_warmups_by_account = (
+            await self._limit_warmup_repo.latest_by_account(account_ids) if self._limit_warmup_repo else {}
+        )
         request_usage_by_account = {
             account_id: AccountRequestUsage(
                 request_count=row.request_count,
@@ -167,6 +174,7 @@ class AccountsService:
             secondary_usage=secondary_usage,
             request_usage_by_account=request_usage_by_account,
             additional_quotas_by_account=additional_quotas_by_account,
+            limit_warmups_by_account=limit_warmups_by_account,
             encryptor=self._encryptor,
         )
         if self._platform_service is None:
@@ -203,6 +211,7 @@ class AccountsService:
             account_id=account_id,
             primary=trend.primary if trend else [],
             secondary=trend.secondary if trend else [],
+            secondary_scheduled=trend.secondary_scheduled if trend else [],
         )
 
     async def import_account(self, raw: bytes) -> AccountImportResponse:
@@ -328,6 +337,9 @@ class AccountsService:
             get_account_selection_cache().invalidate()
         return result
 
+    async def set_limit_warmup_enabled(self, account_id: str, enabled: bool) -> bool:
+        return await self._repo.update_limit_warmup_enabled(account_id, enabled)
+
     async def delete_account(self, account_id: str) -> bool:
         result = await self._repo.delete(account_id)
         if not result and self._platform_service is not None:
@@ -339,6 +351,38 @@ class AccountsService:
             if poller is not None:
                 await poller.bump(NAMESPACE_API_KEY)
         return result
+
+    async def set_account_alias(self, account_id: str, alias: str | None) -> bool:
+        normalized = alias.strip() if isinstance(alias, str) else None
+        if normalized == "":
+            normalized = None
+        return await self._repo.update_alias(account_id, normalized)
+
+    async def export_account(self, account_id: str) -> AccountExportResponse | None:
+        account = await self._repo.get_by_id(account_id)
+        if not account:
+            return None
+        access_token = self._encryptor.decrypt(account.access_token_encrypted)
+        refresh_token = self._encryptor.decrypt(account.refresh_token_encrypted)
+        id_token = self._encryptor.decrypt(account.id_token_encrypted)
+        auth_json = {
+            "auth_mode": "chatgpt",
+            "OPENAI_API_KEY": None,
+            "tokens": {
+                "id_token": id_token,
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "account_id": account.chatgpt_account_id,
+            },
+            "last_refresh": account.last_refresh.strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z",
+        }
+        return AccountExportResponse(
+            account_id=account.id,
+            email=account.email,
+            plan_type=account.plan_type,
+            status=account.status.value,
+            auth_json=json.dumps(auth_json, indent=2),
+        )
 
     async def _validate_platform_identity(
         self,
@@ -372,11 +416,14 @@ class AccountsService:
                 models=[],
             )
         data = response.payload.get("data")
-        models = (
-            [entry.get("id") for entry in data if isinstance(entry, dict) and isinstance(entry.get("id"), str)]
-            if isinstance(data, list)
-            else []
-        )
+        models: list[str] = []
+        if isinstance(data, list):
+            for entry in data:
+                if not isinstance(entry, dict):
+                    continue
+                model_id = entry.get("id")
+                if isinstance(model_id, str):
+                    models.append(model_id)
         return PlatformIdentityValidationResult(
             valid=True,
             last_validated_at=utcnow(),

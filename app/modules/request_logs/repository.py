@@ -15,7 +15,10 @@ from app.core.usage.types import BucketModelAggregate, RequestActivityAggregate
 from app.core.utils.request_id import ensure_request_id
 from app.core.utils.time import utcnow
 from app.db.models import Account, ApiKey, RequestLog
+from app.db.session import sqlite_writer_section
 from app.modules.upstream_identities.types import CHATGPT_WEB_PROVIDER_KIND
+
+_INTERNAL_LIMIT_WARMUP_SOURCE = "limit_warmup"
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,7 +32,9 @@ class RequestLogsRepository:
         self._session = session
 
     async def list_since(self, since: datetime) -> list[RequestLog]:
-        result = await self._session.execute(select(RequestLog).where(RequestLog.requested_at >= since))
+        result = await self._session.execute(
+            select(RequestLog).where(RequestLog.requested_at >= since, _normal_traffic_clause())
+        )
         return list(result.scalars().all())
 
     async def find_latest_account_id_for_response_id(
@@ -101,7 +106,7 @@ class RequestLogsRepository:
                 func.coalesce(func.sum(RequestLog.reasoning_tokens), 0).label("reasoning_tokens"),
                 func.coalesce(func.sum(RequestLog.cost_usd), 0.0).label("cost_usd"),
             )
-            .where(RequestLog.requested_at >= since)
+            .where(RequestLog.requested_at >= since, _normal_traffic_clause())
             .group_by(bucket_col, RequestLog.model, RequestLog.service_tier)
             .order_by(bucket_col)
         )
@@ -133,7 +138,7 @@ class RequestLogsRepository:
             func.coalesce(func.sum(RequestLog.output_tokens), 0).label("output_tokens"),
             func.coalesce(func.sum(RequestLog.cached_input_tokens), 0).label("cached_input_tokens"),
             func.coalesce(func.sum(RequestLog.cost_usd), 0.0).label("cost_usd"),
-        ).where(RequestLog.requested_at >= since)
+        ).where(RequestLog.requested_at >= since, _normal_traffic_clause())
         result = await self._session.execute(stmt)
         row = result.one()
         return RequestActivityAggregate(
@@ -150,6 +155,7 @@ class RequestLogsRepository:
             select(RequestLog.error_code, func.count(RequestLog.id).label("error_count"))
             .where(
                 RequestLog.requested_at >= since,
+                _normal_traffic_clause(),
                 RequestLog.status != "success",
                 RequestLog.error_code.is_not(None),
             )
@@ -190,55 +196,58 @@ class RequestLogsRepository:
         rejection_reason: str | None = None,
         session_id: str | None = None,
         plan_type: str | None = None,
+        source: str | None = None,
     ) -> RequestLog:
-        resolved_request_id = ensure_request_id(request_id)
-        resolved_provider_kind = provider_kind
-        if resolved_provider_kind is None and account_id is not None:
-            resolved_provider_kind = CHATGPT_WEB_PROVIDER_KIND
-        resolved_routing_subject_id = routing_subject_id or account_id
-        resolved_plan_type = plan_type
-        if resolved_plan_type is None and account_id:
-            resolved_plan_type = await self._resolve_account_plan_type(account_id)
-        log = RequestLog(
-            account_id=account_id,
-            provider_kind=resolved_provider_kind,
-            routing_subject_id=resolved_routing_subject_id,
-            api_key_id=api_key_id,
-            session_id=session_id,
-            request_id=resolved_request_id,
-            model=model,
-            plan_type=resolved_plan_type,
-            transport=transport,
-            route_class=route_class,
-            upstream_request_id=upstream_request_id,
-            rejection_reason=rejection_reason,
-            service_tier=service_tier,
-            requested_service_tier=requested_service_tier,
-            actual_service_tier=actual_service_tier,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            cached_input_tokens=cached_input_tokens,
-            reasoning_tokens=reasoning_tokens,
-            cost_usd=None,
-            reasoning_effort=reasoning_effort,
-            latency_ms=latency_ms,
-            latency_first_token_ms=latency_first_token_ms,
-            status=status,
-            error_code=error_code,
-            error_message=error_message,
-            requested_at=requested_at or utcnow(),
-        )
-        log.cost_usd = calculated_cost_from_log(typing_cast(RequestLogLike, log))
-        self._session.add(log)
-        try:
-            await self._session.commit()
-            await self._session.refresh(log)
-            return log
-        except sa_exc.ResourceClosedError:
-            return log
-        except BaseException:
-            await _safe_rollback(self._session)
-            raise
+        async with sqlite_writer_section():
+            resolved_request_id = ensure_request_id(request_id)
+            resolved_provider_kind = provider_kind
+            if resolved_provider_kind is None and account_id is not None:
+                resolved_provider_kind = CHATGPT_WEB_PROVIDER_KIND
+            resolved_routing_subject_id = routing_subject_id or account_id
+            resolved_plan_type = plan_type
+            if resolved_plan_type is None and account_id:
+                resolved_plan_type = await self._resolve_account_plan_type(account_id)
+            log = RequestLog(
+                account_id=account_id,
+                provider_kind=resolved_provider_kind,
+                routing_subject_id=resolved_routing_subject_id,
+                api_key_id=api_key_id,
+                session_id=session_id,
+                request_id=resolved_request_id,
+                model=model,
+                plan_type=resolved_plan_type,
+                source=source,
+                transport=transport,
+                route_class=route_class,
+                upstream_request_id=upstream_request_id,
+                rejection_reason=rejection_reason,
+                service_tier=service_tier,
+                requested_service_tier=requested_service_tier,
+                actual_service_tier=actual_service_tier,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cached_input_tokens=cached_input_tokens,
+                reasoning_tokens=reasoning_tokens,
+                cost_usd=None,
+                reasoning_effort=reasoning_effort,
+                latency_ms=latency_ms,
+                latency_first_token_ms=latency_first_token_ms,
+                status=status,
+                error_code=error_code,
+                error_message=error_message,
+                requested_at=requested_at or utcnow(),
+            )
+            log.cost_usd = calculated_cost_from_log(typing_cast(RequestLogLike, log))
+            self._session.add(log)
+            try:
+                await self._session.commit()
+                await self._session.refresh(log)
+                return log
+            except sa_exc.ResourceClosedError:
+                return log
+            except BaseException:
+                await _safe_rollback(self._session)
+                raise
 
     async def update_model_for_request(self, request_id: str, model: str) -> int:
         """Override the ``model`` field of any logs matching ``request_id``.
@@ -251,28 +260,29 @@ class RequestLogsRepository:
 
         Returns the number of rows that were updated.
         """
-        resolved_request_id = ensure_request_id(request_id)
-        try:
-            # Fetch the affected rows so we can recompute ``cost_usd``
-            # from the new model. ``add_log`` derives the cost at insert
-            # time from the original (host) model; without recomputing
-            # here, dashboards would mix the public ``gpt-image-*`` model
-            # label with host-model pricing and report inaccurate cost.
-            stmt = select(RequestLog).where(RequestLog.request_id == resolved_request_id)
-            result_rows = await self._session.execute(stmt)
-            logs = list(result_rows.scalars())
-            if not logs:
+        async with sqlite_writer_section():
+            resolved_request_id = ensure_request_id(request_id)
+            try:
+                # Fetch the affected rows so we can recompute ``cost_usd``
+                # from the new model. ``add_log`` derives the cost at insert
+                # time from the original (host) model; without recomputing
+                # here, dashboards would mix the public ``gpt-image-*`` model
+                # label with host-model pricing and report inaccurate cost.
+                stmt = select(RequestLog).where(RequestLog.request_id == resolved_request_id)
+                result_rows = await self._session.execute(stmt)
+                logs = list(result_rows.scalars())
+                if not logs:
+                    return 0
+                for log in logs:
+                    log.model = model
+                    log.cost_usd = calculated_cost_from_log(typing_cast(RequestLogLike, log))
+                await self._session.commit()
+            except sa_exc.ResourceClosedError:
                 return 0
-            for log in logs:
-                log.model = model
-                log.cost_usd = calculated_cost_from_log(typing_cast(RequestLogLike, log))
-            await self._session.commit()
-        except sa_exc.ResourceClosedError:
-            return 0
-        except BaseException:
-            await _safe_rollback(self._session)
-            raise
-        return len(logs)
+            except BaseException:
+                await _safe_rollback(self._session)
+                raise
+            return len(logs)
 
     async def list_recent(
         self,
@@ -304,6 +314,7 @@ class RequestLogsRepository:
             include_error_other=include_error_other,
             error_codes_in=error_codes_in,
             error_codes_excluding=error_codes_excluding,
+            exclude_soft_deleted=True,
         )
 
         total_col = func.count().over().label("_total")
@@ -357,6 +368,7 @@ class RequestLogsRepository:
             include_error_other=True,
             error_codes_in=None,
             error_codes_excluding=None,
+            exclude_soft_deleted=True,
         )
         api_key_facet_filters = self._build_filters(
             since=since,
@@ -370,6 +382,7 @@ class RequestLogsRepository:
             include_error_other=True,
             error_codes_in=None,
             error_codes_excluding=None,
+            exclude_soft_deleted=True,
         )
 
         subject_id = _request_log_subject_id_expr()
@@ -435,8 +448,11 @@ class RequestLogsRepository:
         include_error_other: bool = True,
         error_codes_in: list[str] | None = None,
         error_codes_excluding: list[str] | None = None,
+        exclude_soft_deleted: bool = False,
     ) -> _RequestLogFilters:
-        conditions = []
+        conditions = [_normal_traffic_clause()]
+        if exclude_soft_deleted:
+            conditions.append(RequestLog.deleted_at.is_(None))
         if since is not None:
             conditions.append(RequestLog.requested_at >= since)
         if until is not None:
@@ -491,6 +507,7 @@ class RequestLogsRepository:
                     RequestLog.request_id.ilike(search_pattern),
                     RequestLog.model.ilike(search_pattern),
                     RequestLog.reasoning_effort.ilike(search_pattern),
+                    RequestLog.source.ilike(search_pattern),
                     RequestLog.status.ilike(search_pattern),
                     RequestLog.error_code.ilike(search_pattern),
                     RequestLog.error_message.ilike(search_pattern),
@@ -528,3 +545,7 @@ async def _safe_rollback(session: AsyncSession) -> None:
             await session.rollback()
     except BaseException:
         return
+
+
+def _normal_traffic_clause():
+    return or_(RequestLog.source.is_(None), RequestLog.source != _INTERNAL_LIMIT_WARMUP_SOURCE)

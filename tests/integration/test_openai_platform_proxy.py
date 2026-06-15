@@ -1009,7 +1009,7 @@ async def test_v1_responses_stream_falls_back_to_platform_when_primary_usage_is_
         assert response.status_code == 200
         lines = [line async for line in response.aiter_lines() if line]
 
-    events = [json.loads(line[6:]) for line in lines if line.startswith("data: ")]
+    events = [json.loads(line[6:]) for line in lines if line.startswith("data: ") and line != "data: [DONE]"]
     event_types = [event.get("type") for event in events]
     assert event_types == ["response.created", "response.completed"]
 
@@ -2777,7 +2777,7 @@ async def test_backend_codex_responses_with_sticky_turn_state_keeps_chatgpt_when
         assert response.status_code == 200
         lines = [line async for line in response.aiter_lines() if line]
 
-    events = [json.loads(line[6:]) for line in lines if line.startswith("data: ")]
+    events = [json.loads(line[6:]) for line in lines if line.startswith("data: ") and line != "data: [DONE]"]
     assert [event.get("type") for event in events] == ["response.created", "response.completed"]
     assert events[-1]["response"]["id"] == "resp_backend_http_sticky_chatgpt"
 

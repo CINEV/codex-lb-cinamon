@@ -1,4 +1,4 @@
-import { Clock, ExternalLink, Play, RotateCcw } from "lucide-react";
+import { Clock, ExternalLink, Play, RotateCcw, Zap } from "lucide-react";
 
 import { usePrivacyStore } from "@/hooks/use-privacy";
 import { Button } from "@/components/ui/button";
@@ -12,13 +12,14 @@ import {
   quotaBarTrack,
 } from "@/utils/account-status";
 import {
+  formatDateTimeInline,
   formatPercentNullable,
   formatProviderLabel,
   formatQuotaResetLabel,
   formatSlug,
 } from "@/utils/formatters";
 
-type AccountAction = "details" | "resume" | "reauth";
+type AccountAction = "details" | "resume" | "reauth" | "warmup-toggle";
 
 export type AccountCardProps = {
   account: AccountSummary;
@@ -89,6 +90,11 @@ export function AccountCard({ account, showAccountId = false, onAction }: Accoun
       ? account.email
       : null;
   const idSuffix = showAccountId ? ` | ID ${compactId}` : "";
+  const warmupStatus = account.limitWarmupEnabled ? "Warm-up on" : "Warm-up off";
+  const warmupToggleLabel = `${account.limitWarmupEnabled ? "Disable" : "Enable"} limit warm-up for ${title}`;
+  const warmupDetail = account.limitWarmup
+    ? `${formatSlug(account.limitWarmup.status)} | ${account.limitWarmup.window === "primary" ? "5h" : "weekly"} | ${formatDateTimeInline(account.limitWarmup.completedAt ?? account.limitWarmup.attemptedAt)}`
+    : "No attempts";
 
   return (
     <div className="card-hover rounded-xl border bg-card p-4">
@@ -123,6 +129,29 @@ export function AccountCard({ account, showAccountId = false, onAction }: Accoun
           <QuotaBar label="Weekly" percent={secondaryRemaining} resetLabel={secondaryReset} />
         </div>
       )}
+
+      <div className="mt-3 flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-2.5 py-2 text-xs">
+        <div className="min-w-0">
+          <p className="font-medium">{warmupStatus}</p>
+          <p className="truncate text-[11px] text-muted-foreground">{warmupDetail}</p>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className={cn(
+            "h-7 gap-1.5 rounded-lg text-xs",
+            account.limitWarmupEnabled
+              ? "text-primary hover:bg-primary/10 hover:text-primary"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+          aria-label={warmupToggleLabel}
+          onClick={() => onAction?.(account, "warmup-toggle")}
+        >
+          <Zap className="h-3 w-3" aria-hidden="true" />
+          {account.limitWarmupEnabled ? "On" : "Off"}
+        </Button>
+      </div>
 
       {/* Actions */}
       <div className="mt-3 flex items-center gap-1.5 border-t pt-3">

@@ -2,6 +2,7 @@ import { User } from "lucide-react";
 
 import { isEmailLabel } from "@/components/blur-email";
 import { usePrivacyStore } from "@/hooks/use-privacy";
+import { AccountAliasForm } from "@/features/accounts/components/account-alias-form";
 import { AccountActions } from "@/features/accounts/components/account-actions";
 import { AccountTokenInfo } from "@/features/accounts/components/account-token-info";
 import { AccountUsagePanel } from "@/features/accounts/components/account-usage-panel";
@@ -18,8 +19,11 @@ export type AccountDetailProps = {
   onEditPlatform: (account: AccountSummary) => void;
   onPause: (accountId: string) => void;
   onResume: (accountId: string) => void;
+  onSetAlias: (accountId: string, alias: string | null) => Promise<unknown>;
   onDelete: (accountId: string) => void;
   onReauth: () => void;
+  onExport: (accountId: string) => void;
+  onLimitWarmupChange: (accountId: string, enabled: boolean) => void;
 };
 
 export function AccountDetail({
@@ -29,8 +33,11 @@ export function AccountDetail({
   onEditPlatform,
   onPause,
   onResume,
+  onSetAlias,
   onDelete,
   onReauth,
+  onExport,
+  onLimitWarmupChange,
 }: AccountDetailProps) {
   const isPlatformIdentity = account?.providerKind === "openai_platform";
   const { data: trends } = useAccountTrends(isPlatformIdentity ? null : (account?.accountId ?? null));
@@ -74,6 +81,7 @@ export function AccountDetail({
         <p className="mt-1 text-xs text-muted-foreground">{providerLabel}</p>
       </div>
 
+      {!isPlatformIdentity ? <AccountAliasForm account={account} busy={busy} onSetAlias={onSetAlias} /> : null}
       {isPlatformIdentity ? (
         <PlatformIdentityPanel account={account} />
       ) : (
@@ -90,6 +98,8 @@ export function AccountDetail({
         onResume={onResume}
         onDelete={onDelete}
         onReauth={onReauth}
+        onExport={onExport}
+        onLimitWarmupChange={onLimitWarmupChange}
       />
     </div>
   );

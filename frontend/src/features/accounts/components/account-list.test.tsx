@@ -29,6 +29,7 @@ describe("AccountList", () => {
             planType: "plus",
             status: "active",
             eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
             additionalQuotas: [],
           },
           {
@@ -38,6 +39,7 @@ describe("AccountList", () => {
             planType: "pro",
             status: "paused",
             eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
             additionalQuotas: [],
           },
         ]}
@@ -74,6 +76,7 @@ describe("AccountList", () => {
             displayName: "Hidden Early",
             planType: "plus",
             status: "active",
+            limitWarmupEnabled: false,
             usage: {
               primaryRemainingPercent: 42,
               secondaryRemainingPercent: 18,
@@ -91,6 +94,7 @@ describe("AccountList", () => {
             displayName: "Visible Early",
             planType: "plus",
             status: "active",
+            limitWarmupEnabled: false,
             usage: {
               primaryRemainingPercent: 82,
               secondaryRemainingPercent: 73,
@@ -129,6 +133,7 @@ describe("AccountList", () => {
             displayName: "Stale",
             planType: "plus",
             status: "active",
+            limitWarmupEnabled: false,
             usage: {
               primaryRemainingPercent: 42,
               secondaryRemainingPercent: 18,
@@ -146,6 +151,7 @@ describe("AccountList", () => {
             displayName: "Fresh",
             planType: "plus",
             status: "active",
+            limitWarmupEnabled: false,
             usage: {
               primaryRemainingPercent: 82,
               secondaryRemainingPercent: 73,
@@ -184,6 +190,7 @@ describe("AccountList", () => {
             displayName: "Late",
             planType: "plus",
             status: "active",
+            limitWarmupEnabled: false,
             usage: {
               primaryRemainingPercent: 42,
               secondaryRemainingPercent: null,
@@ -201,6 +208,7 @@ describe("AccountList", () => {
             displayName: "Early",
             planType: "plus",
             status: "active",
+            limitWarmupEnabled: false,
             usage: {
               primaryRemainingPercent: 82,
               secondaryRemainingPercent: null,
@@ -242,6 +250,7 @@ describe("AccountList", () => {
             planType: "plus",
             status: "active",
             eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
             additionalQuotas: [],
           },
         ]}
@@ -270,6 +279,7 @@ describe("AccountList", () => {
             planType: "plus",
             status: "active",
             eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
             additionalQuotas: [],
           },
           {
@@ -279,6 +289,7 @@ describe("AccountList", () => {
             planType: "plus",
             status: "active",
             eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
             additionalQuotas: [],
           },
           {
@@ -288,6 +299,7 @@ describe("AccountList", () => {
             planType: "pro",
             status: "active",
             eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
             additionalQuotas: [],
           },
         ]}
@@ -363,6 +375,7 @@ describe("AccountList", () => {
             providerKind: "openai_platform",
             routingSubjectId: "subject-platform-1",
             eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
             additionalQuotas: [],
           },
           {
@@ -372,6 +385,7 @@ describe("AccountList", () => {
             planType: "pro",
             status: "active",
             eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
             additionalQuotas: [],
           },
         ]}

@@ -8,7 +8,7 @@ from collections.abc import Awaitable, Callable
 from typing import Final
 from urllib.parse import urlsplit
 
-from app.core.clients.http import get_http_client
+from app.core.clients.http import lease_http_session
 from app.core.config.settings import get_settings
 
 logger = logging.getLogger(__name__)
@@ -92,18 +92,18 @@ class PlatformCacheAlertService:
 
 
 async def _post_alert(alert_url: str, suffix: str, client_version: str | None, timeout_seconds: float) -> None:
-    client = get_http_client()
     async with asyncio.timeout(timeout_seconds):
-        async with client.session.post(
-            alert_url,
-            json={
-                "api_key_suffix": suffix,
-                "client_version": client_version,
-            },
-        ) as response:
-            if response.status >= 400:
-                text = await response.text()
-                raise RuntimeError(f"alert proxy returned {response.status}: {text[:200]}")
+        async with lease_http_session() as session:
+            async with session.post(
+                alert_url,
+                json={
+                    "api_key_suffix": suffix,
+                    "client_version": client_version,
+                },
+            ) as response:
+                if response.status >= 400:
+                    text = await response.text()
+                    raise RuntimeError(f"alert proxy returned {response.status}: {text[:200]}")
 
 
 def _normalize_suffix(value: str | None) -> str | None:

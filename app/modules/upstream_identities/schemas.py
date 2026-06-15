@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import cast
 
 from pydantic import Field, field_validator
 
@@ -83,4 +84,4 @@ class PlatformIdentitySummary(DashboardModel):
 
 
 def route_family_list(values: tuple[str, ...]) -> list[PlatformRouteFamily]:
-    return [value for value in values if value in PHASE1_PLATFORM_ROUTE_FAMILIES]  # type: ignore[list-item]
+    return [cast(PlatformRouteFamily, value) for value in values if value in PHASE1_PLATFORM_ROUTE_FAMILIES]

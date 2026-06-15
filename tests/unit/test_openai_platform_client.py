@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, AsyncIterator, cast
 
 import pytest
 
@@ -16,7 +16,7 @@ class _FakeContent:
     def __init__(self, chunks: list[bytes]) -> None:
         self._chunks = chunks
 
-    async def iter_chunked(self, size: int):
+    async def iter_chunked(self, size: int) -> AsyncIterator[bytes]:
         del size
         for chunk in self._chunks:
             yield chunk
@@ -113,6 +113,31 @@ class _ContextPostSession:
         return _ResponseContext(self._response)
 
 
+class _FakeSessionLease:
+    def __init__(self, session: object) -> None:
+        self.session = session
+        self.entered = False
+        self.closed = False
+
+    async def __aenter__(self) -> object:
+        self.entered = True
+        return self.session
+
+    async def __aexit__(self, exc_type, exc, tb) -> bool:
+        del exc_type, exc, tb
+        self.closed = True
+        return False
+
+
+class _FakeHttpClientLease:
+    def __init__(self, session: object) -> None:
+        self.client = SimpleNamespace(session=session)
+        self.closed = False
+
+    async def close(self) -> None:
+        self.closed = True
+
+
 @pytest.mark.asyncio
 async def test_iter_sse_event_blocks_reassembles_fragmented_events() -> None:
     response = _FakeResponse(
@@ -127,7 +152,7 @@ async def test_iter_sse_event_blocks_reassembles_fragmented_events() -> None:
         ]
     )
 
-    events = [event async for event in _iter_sse_event_blocks(response)]
+    events = [event async for event in _iter_sse_event_blocks(cast(Any, response))]
 
     assert events == [
         'event: response.output_text.delta\ndata: {"type":"response.output_text.delta"}\n\n',
@@ -148,7 +173,8 @@ async def test_fetch_models_normalizes_non_json_error_body(monkeypatch) -> None:
         text_body="<html>upstream outage</html>",
     )
     session = _FakeSession(response)
-    monkeypatch.setattr(openai_platform_module, "get_http_client", lambda: SimpleNamespace(session=session))
+    lease = _FakeSessionLease(session)
+    monkeypatch.setattr(openai_platform_module, "lease_http_session", lambda: lease)
 
     with pytest.raises(OpenAIPlatformError) as exc_info:
         await fetch_models(base_url="https://api.openai.com", api_key="sk-test")
@@ -160,6 +186,8 @@ async def test_fetch_models_normalizes_non_json_error_body(monkeypatch) -> None:
     assert "upstream outage" in str(error.get("message"))
     assert exc_info.value.upstream_request_id == "up_req_models_error"
     assert session.get_calls[0]["url"] == "https://api.openai.com/v1/models"
+    assert lease.entered is True
+    assert lease.closed is True
 
 
 @pytest.mark.asyncio
@@ -172,7 +200,12 @@ async def test_stream_responses_preserves_upstream_request_id(monkeypatch) -> No
         headers={"x-request-id": "up_req_stream_1"},
     )
     session = _FakeSession(response)
-    monkeypatch.setattr(openai_platform_module, "get_http_client", lambda: SimpleNamespace(session=session))
+    lease = _FakeHttpClientLease(session)
+
+    async def fake_acquire_http_client() -> _FakeHttpClientLease:
+        return lease
+
+    monkeypatch.setattr(openai_platform_module, "acquire_http_client", fake_acquire_http_client)
 
     stream_response = await openai_platform_module.stream_responses(
         base_url="https://api.openai.com",
@@ -181,6 +214,7 @@ async def test_stream_responses_preserves_upstream_request_id(monkeypatch) -> No
         organization="org_test",
         project="proj_test",
     )
+    assert lease.closed is False
     events = [event async for event in stream_response.event_stream]
 
     assert stream_response.upstream_request_id == "up_req_stream_1"
@@ -189,6 +223,7 @@ async def test_stream_responses_preserves_upstream_request_id(monkeypatch) -> No
         'data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}\n\n',
     ]
     assert response.released is True
+    assert lease.closed is True
     assert session.post_calls[0]["url"] == "https://api.openai.com/v1/responses"
 
 
@@ -204,7 +239,8 @@ async def test_create_compact_response_respects_compact_timeout_overrides(monkey
         },
     )
     session = _ContextPostSession(response)
-    monkeypatch.setattr(openai_platform_module, "get_http_client", lambda: SimpleNamespace(session=session))
+    lease = _FakeSessionLease(session)
+    monkeypatch.setattr(openai_platform_module, "lease_http_session", lambda: lease)
     monkeypatch.setattr(
         openai_platform_module,
         "get_settings",
@@ -225,6 +261,8 @@ async def test_create_compact_response_respects_compact_timeout_overrides(monkey
     assert result.payload.object == "response.compaction"
     assert timeout.sock_connect == pytest.approx(8.0)
     assert timeout.total == pytest.approx(11.0, abs=0.01)
+    assert lease.entered is True
+    assert lease.closed is True
 
 
 @pytest.mark.asyncio
@@ -261,7 +299,8 @@ async def test_create_compact_response_inlines_input_images(monkeypatch) -> None
             ],
         }
 
-    monkeypatch.setattr(openai_platform_module, "get_http_client", lambda: SimpleNamespace(session=session))
+    lease = _FakeSessionLease(session)
+    monkeypatch.setattr(openai_platform_module, "lease_http_session", lambda: lease)
     monkeypatch.setattr(
         openai_platform_module,
         "get_settings",
@@ -292,6 +331,8 @@ async def test_create_compact_response_inlines_input_images(monkeypatch) -> None
     assert captured["connect_timeout"] == pytest.approx(8.0)
     assert captured["total_timeout"] is None
     assert session.post_calls[0]["json"]["input"][0]["content"][0]["image_url"].startswith("data:image/png")
+    assert lease.entered is True
+    assert lease.closed is True
 
 
 @pytest.mark.asyncio
@@ -307,7 +348,8 @@ async def test_create_compact_response_deducts_inline_preprocessing_from_total_t
     )
     session = _ContextPostSession(response)
     monotonic_values = iter([100.0, 104.5])
-    monkeypatch.setattr(openai_platform_module, "get_http_client", lambda: SimpleNamespace(session=session))
+    lease = _FakeSessionLease(session)
+    monkeypatch.setattr(openai_platform_module, "lease_http_session", lambda: lease)
     monkeypatch.setattr(
         openai_platform_module,
         "get_settings",
@@ -330,6 +372,8 @@ async def test_create_compact_response_deducts_inline_preprocessing_from_total_t
     assert timeout.total == pytest.approx(5.5)
     assert timeout.sock_read == pytest.approx(5.5)
     assert timeout.sock_connect == pytest.approx(5.5)
+    assert lease.entered is True
+    assert lease.closed is True
 
 
 @pytest.mark.asyncio
@@ -341,7 +385,8 @@ async def test_create_response_preserves_upstream_request_id_on_error(monkeypatc
         body={"error": {"code": "invalid_api_key", "message": "Invalid API key"}},
     )
     session = _ContextPostSession(response)
-    monkeypatch.setattr(openai_platform_module, "get_http_client", lambda: SimpleNamespace(session=session))
+    lease = _FakeSessionLease(session)
+    monkeypatch.setattr(openai_platform_module, "lease_http_session", lambda: lease)
 
     with pytest.raises(OpenAIPlatformError) as exc_info:
         await openai_platform_module.create_response(
@@ -352,3 +397,5 @@ async def test_create_response_preserves_upstream_request_id_on_error(monkeypatc
 
     assert exc_info.value.status_code == 401
     assert exc_info.value.upstream_request_id == "up_req_platform_error"
+    assert lease.entered is True
+    assert lease.closed is True

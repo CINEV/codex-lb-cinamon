@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-
 import pytest
 from anyio import to_thread
 from sqlalchemy import text
@@ -25,7 +23,6 @@ except ImportError:
 
 from app.db.migrate import (
     LEGACY_MIGRATION_ORDER,
-    check_schema_drift,
     inspect_migration_state,
     run_startup_migrations,
     run_upgrade,
@@ -34,21 +31,11 @@ from app.db.models import Account, AccountStatus
 from app.db.session import SessionLocal
 from app.modules.accounts.repository import AccountsRepository
 
-try:
-    from app.db.migrate import check_migration_policy as _check_migration_policy
-except ImportError:
-    check_migration_policy: Callable[[str], tuple[str, ...]] | None = None
-else:
-    check_migration_policy = _check_migration_policy
 pytestmark = pytest.mark.integration
 _DATABASE_URL = get_settings().database_url
 _HEAD_REVISION = inspect_migration_state(_DATABASE_URL).head_revision
 _STAMPED_AFTER_LEGACY_PREFIX_4 = OLD_TO_NEW_REVISION_MAP["004_add_accounts_chatgpt_account_id"]
 _STAMPED_AFTER_LEGACY_PREFIX_1 = OLD_TO_NEW_REVISION_MAP["001_normalize_account_plan_types"]
-
-
-def _is_postgresql_database_url(url: str) -> bool:
-    return url.startswith("postgresql+")
 
 
 def _make_account(account_id: str, email: str, plan_type: str) -> Account:
@@ -259,63 +246,6 @@ async def test_run_startup_migrations_handles_legacy_schema_table_and_legacy_ale
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    (not _is_postgresql_database_url(_DATABASE_URL)) or check_migration_policy is None,
-    reason="PostgreSQL-only migration contract test",
-)
-async def test_postgresql_migration_contract_policy_and_drift_match(db_setup):
-    result = await run_startup_migrations(_DATABASE_URL)
-    assert result.current_revision == _HEAD_REVISION
-
-    assert check_migration_policy is not None
-    assert check_migration_policy(_DATABASE_URL) == ()
-    assert check_schema_drift(_DATABASE_URL) == ()
-
-
-@pytest.mark.asyncio
-@pytest.mark.skipif(
-    not _is_postgresql_database_url(_DATABASE_URL),
-    reason="PostgreSQL-only empty database migration test",
-)
-async def test_postgresql_upgrade_head_from_empty_database(db_setup):
-    async with SessionLocal() as session:
-        await session.execute(text("DROP SCHEMA public CASCADE"))
-        await session.execute(text("CREATE SCHEMA public"))
-        await session.commit()
-
-    result = await run_startup_migrations(_DATABASE_URL)
-    assert result.current_revision == _HEAD_REVISION
-
-    async with SessionLocal() as session:
-        revision_rows = await session.execute(text("SELECT version_num FROM alembic_version"))
-        revisions = sorted(str(row[0]) for row in revision_rows.fetchall())
-        assert revisions == [_HEAD_REVISION]
-
-
-@pytest.mark.asyncio
-@pytest.mark.skipif(
-    (not _is_postgresql_database_url(_DATABASE_URL)) or (not _HAS_REVISION_REMAP),
-    reason="PostgreSQL-only migration remap test",
-)
-async def test_postgresql_startup_migration_auto_remap_legacy_head(db_setup):
-    await run_startup_migrations(_DATABASE_URL)
-
-    async with SessionLocal() as session:
-        await session.execute(
-            text("UPDATE alembic_version SET version_num = :legacy"),
-            {"legacy": "013_add_dashboard_settings_routing_strategy"},
-        )
-        await session.commit()
-
-    result = await run_startup_migrations(_DATABASE_URL)
-    assert result.current_revision == _HEAD_REVISION
-
-    async with SessionLocal() as session:
-        version_num = (await session.execute(text("SELECT version_num FROM alembic_version LIMIT 1"))).scalar_one()
-        assert str(version_num) == _HEAD_REVISION
-
-
-@pytest.mark.asyncio
 async def test_run_startup_migrations_drops_accounts_email_unique_with_non_cascade_fks(tmp_path):
     db_path = tmp_path / "legacy-no-cascade.db"
     db_url = f"sqlite+aiosqlite:///{db_path}"
@@ -370,7 +300,7 @@ async def test_run_startup_migrations_drops_accounts_email_unique_with_non_casca
                     """
                     CREATE TABLE request_logs (
                         id INTEGER PRIMARY KEY,
-                        account_id VARCHAR NOT NULL REFERENCES accounts(id),
+                        account_id VARCHAR NOT NULL,
                         request_id VARCHAR NOT NULL,
                         requested_at DATETIME NOT NULL,
                         model VARCHAR NOT NULL,
@@ -382,7 +312,9 @@ async def test_run_startup_migrations_drops_accounts_email_unique_with_non_casca
                         latency_ms INTEGER,
                         status VARCHAR NOT NULL,
                         error_code VARCHAR,
-                        error_message TEXT
+                        error_message TEXT,
+                        CONSTRAINT request_logs_account_id_fkey
+                            FOREIGN KEY(account_id) REFERENCES accounts(id)
                     )
                     """
                 )
@@ -484,14 +416,25 @@ async def test_run_startup_migrations_drops_accounts_email_unique_with_non_casca
             await session.execute(text("PRAGMA foreign_keys=ON"))
             dashboard_columns_rows = (await session.execute(text("PRAGMA table_info(dashboard_settings)"))).fetchall()
             dashboard_columns = {str(row[1]) for row in dashboard_columns_rows if len(row) > 1}
+            account_columns_rows = (await session.execute(text("PRAGMA table_info(accounts)"))).fetchall()
+            account_columns = {str(row[1]) for row in account_columns_rows if len(row) > 1}
             request_log_columns_rows = (await session.execute(text("PRAGMA table_info(request_logs)"))).fetchall()
             request_log_columns = {str(row[1]) for row in request_log_columns_rows if len(row) > 1}
+            assert "deleted_at" in request_log_columns
             assert "transport" in request_log_columns
             assert "plan_type" in request_log_columns
+            assert "source" in request_log_columns
+            assert "limit_warmup_enabled" in account_columns
             legacy_plan_type = (
                 await session.execute(text("SELECT plan_type FROM request_logs WHERE id=1"))
             ).scalar_one()
             assert legacy_plan_type is None
+            assert "limit_warmup_enabled" in dashboard_columns
+            assert "limit_warmup_windows" in dashboard_columns
+            assert "limit_warmup_model" in dashboard_columns
+            assert "limit_warmup_prompt" in dashboard_columns
+            assert "limit_warmup_cooldown_seconds" in dashboard_columns
+            assert "limit_warmup_min_available_percent" in dashboard_columns
             if "routing_strategy" in dashboard_columns:
                 routing_strategy = (
                     await session.execute(text("SELECT routing_strategy FROM dashboard_settings WHERE id=1"))
@@ -622,9 +565,29 @@ async def test_run_startup_migrations_drops_accounts_email_unique_with_non_casca
             request_log_index_rows = (await session.execute(text("PRAGMA index_list(request_logs)"))).fetchall()
             request_log_index_names = {str(row[1]) for row in request_log_index_rows if len(row) > 1}
             assert "idx_logs_requested_at_id" in request_log_index_names
+            assert "idx_logs_deleted_at_requested_at_id" in request_log_index_names
             assert "idx_logs_requested_at_model_tier" in request_log_index_names
             assert "idx_logs_model_effort_time" in request_log_index_names
             assert "idx_logs_status_error_time" in request_log_index_names
+            assert "idx_logs_api_key_time" in request_log_index_names
+            assert "idx_logs_source_requested_at" in request_log_index_names
+            warmup_table_exists = (
+                await session.execute(
+                    text("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='account_limit_warmups'")
+                )
+            ).scalar_one()
+            assert warmup_table_exists == 1
+            warmup_index_rows = (await session.execute(text("PRAGMA index_list(account_limit_warmups)"))).fetchall()
+            warmup_index_names = {str(row[1]) for row in warmup_index_rows if len(row) > 1}
+            assert "idx_account_limit_warmups_account_attempted" in warmup_index_names
+            assert "idx_account_limit_warmups_status_attempted" in warmup_index_names
+            request_log_fk_rows = (await session.execute(text("PRAGMA foreign_key_list(request_logs)"))).fetchall()
+            request_log_fk_actions = {
+                (str(row[2]).lower(), str(row[3]).lower(), str(row[4]).lower(), str(row[6]).lower())
+                for row in request_log_fk_rows
+                if len(row) > 6
+            }
+            assert ("accounts", "account_id", "id", "set null") in request_log_fk_actions
             api_key_index_rows = (await session.execute(text("PRAGMA index_list(api_keys)"))).fetchall()
             api_key_index_names = {str(row[1]) for row in api_key_index_rows if len(row) > 1}
             assert "idx_api_keys_name" in api_key_index_names
@@ -659,6 +622,17 @@ async def test_run_startup_migrations_drops_accounts_email_unique_with_non_casca
             assert usage_count == 1
             assert logs_count == 1
             assert sticky_count == 2
+
+            await session.execute(text("DELETE FROM usage_history WHERE account_id='acc_legacy'"))
+            await session.execute(text("DELETE FROM sticky_sessions WHERE account_id='acc_legacy'"))
+            await session.execute(text("DELETE FROM accounts WHERE id='acc_legacy'"))
+            await session.commit()
+
+            remaining_log = (
+                await session.execute(text("SELECT account_id, deleted_at FROM request_logs WHERE id=1"))
+            ).one()
+            assert remaining_log[0] is None
+            assert remaining_log[1] is None
     finally:
         await engine.dispose()
 

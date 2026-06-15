@@ -32,6 +32,8 @@ class DurableBridgeLookup:
     state: HttpBridgeSessionState
     latest_turn_state: str | None
     latest_response_id: str | None
+    latest_input_item_count: int | None = None
+    latest_input_full_fingerprint: str | None = None
 
     def lease_is_active(self, *, now: datetime) -> bool:
         if self.owner_instance_id is None:
@@ -134,6 +136,8 @@ class DurableBridgeSessionCoordinator:
         lease_ttl_seconds: float,
         latest_turn_state: str | None = None,
         latest_response_id: str | None = None,
+        latest_input_item_count: int | None = None,
+        latest_input_full_fingerprint: str | None = None,
         state: HttpBridgeSessionState | None = None,
     ) -> DurableBridgeLookup | None:
         del api_key_id
@@ -145,6 +149,8 @@ class DurableBridgeSessionCoordinator:
                 lease_ttl_seconds=lease_ttl_seconds,
                 latest_turn_state=latest_turn_state,
                 latest_response_id=latest_response_id,
+                latest_input_item_count=latest_input_item_count,
+                latest_input_full_fingerprint=latest_input_full_fingerprint,
                 state=state,
             )
         if snapshot is None:
@@ -212,6 +218,8 @@ class DurableBridgeSessionCoordinator:
         owner_epoch: int,
         response_id: str,
         lease_ttl_seconds: float,
+        input_item_count: int | None = None,
+        input_full_fingerprint: str | None = None,
     ) -> None:
         api_key_scope = durable_bridge_api_key_scope(api_key_id)
         async with self._session() as session:
@@ -222,6 +230,8 @@ class DurableBridgeSessionCoordinator:
                 owner_epoch=owner_epoch,
                 lease_ttl_seconds=lease_ttl_seconds,
                 latest_response_id=response_id,
+                latest_input_item_count=input_item_count,
+                latest_input_full_fingerprint=input_full_fingerprint,
             )
             if not _snapshot_matches_owner(snapshot, instance_id=instance_id, owner_epoch=owner_epoch):
                 return
@@ -270,6 +280,8 @@ def _to_lookup(snapshot: DurableBridgeSessionSnapshot) -> DurableBridgeLookup:
         state=snapshot.state,
         latest_turn_state=snapshot.latest_turn_state,
         latest_response_id=snapshot.latest_response_id,
+        latest_input_item_count=snapshot.latest_input_item_count,
+        latest_input_full_fingerprint=snapshot.latest_input_full_fingerprint,
     )
 
 

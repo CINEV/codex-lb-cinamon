@@ -9,6 +9,7 @@ type RequestOptions = {
   headers?: HeadersInit;
   signal?: AbortSignal;
   credentials?: RequestCredentials;
+  cache?: RequestCache;
 };
 
 const JSON_CONTENT_TYPE = "application/json";
@@ -149,6 +150,7 @@ async function request<T>(
       headers,
       signal: options?.signal,
       credentials: options?.credentials ?? "same-origin",
+      cache: options?.cache,
     });
   } catch (error) {
     throw new ApiError({

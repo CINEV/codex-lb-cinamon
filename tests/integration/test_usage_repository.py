@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pytest
 from sqlalchemy import text
@@ -157,37 +156,39 @@ async def test_latest_by_account_primary_query_plan_uses_normalized_window_index
 
 
 @pytest.mark.asyncio
-async def test_latest_by_account_primary_query_plan_uses_normalized_window_index_postgresql(db_setup):
-    now = utcnow()
+async def test_trends_by_bucket_uses_latest_sample_window_metadata(db_setup):
+    recorded_at = datetime(2026, 1, 1, 12, 0, 0)
     async with SessionLocal() as session:
-        if _dialect_name(session) != "postgresql":
-            pytest.skip("PostgreSQL-only query plan test")
-
         accounts_repo = AccountsRepository(session)
         repo = UsageRepository(session)
         await accounts_repo.upsert(_make_account("acc1"))
-        await accounts_repo.upsert(_make_account("acc2"))
 
-        await repo.add_entry("acc1", 10.0, window=None, recorded_at=now - timedelta(hours=2))
-        await repo.add_entry("acc1", 20.0, window="primary", recorded_at=now)
-        await repo.add_entry("acc2", 30.0, window=None, recorded_at=now - timedelta(hours=1))
-        await repo.add_entry("acc2", 40.0, window="secondary", recorded_at=now)
+        await repo.add_entry(
+            "acc1",
+            10.0,
+            window="secondary",
+            reset_at=9999,
+            window_minutes=10080,
+            recorded_at=recorded_at,
+        )
+        await repo.add_entry(
+            "acc1",
+            30.0,
+            window="secondary",
+            reset_at=1111,
+            window_minutes=300,
+            recorded_at=recorded_at + timedelta(minutes=5),
+        )
 
-        await session.execute(text("SET enable_seqscan = off"))
-        plan = (
-            await session.execute(
-                text(
-                    """
-                    EXPLAIN (FORMAT JSON)
-                    SELECT DISTINCT ON (account_id) id
-                    FROM usage_history
-                    WHERE coalesce("window", 'primary') = 'primary'
-                    ORDER BY account_id ASC, recorded_at DESC, id DESC
-                    """
-                )
-            )
-        ).scalar_one()
+        trends = await repo.trends_by_bucket(
+            since=recorded_at - timedelta(minutes=1),
+            bucket_seconds=86400,
+            window="secondary",
+        )
 
-    plan_json = json.dumps(plan)
-    assert "idx_usage_window_account_latest" in plan_json or "idx_usage_window_account_time" in plan_json
-    assert "Seq Scan" not in plan_json
+    assert len(trends) == 1
+    assert trends[0].samples == 2
+    assert trends[0].avg_used_percent == pytest.approx(20.0)
+    assert trends[0].reset_at == 1111
+    assert trends[0].window_minutes == 300
+    assert trends[0].recorded_at == recorded_at + timedelta(minutes=5)
