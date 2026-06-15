@@ -31,6 +31,22 @@ class _FakeAlertSession:
         return _FakePostResponse()
 
 
+class _FakeSessionLease:
+    def __init__(self, session: _FakeAlertSession) -> None:
+        self.session = session
+        self.entered = False
+        self.closed = False
+
+    async def __aenter__(self) -> _FakeAlertSession:
+        self.entered = True
+        return self.session
+
+    async def __aexit__(self, exc_type, exc, tb) -> bool:
+        del exc_type, exc, tb
+        self.closed = True
+        return False
+
+
 def _install_settings(
     monkeypatch: pytest.MonkeyPatch,
     *,
@@ -200,7 +216,8 @@ async def test_platform_cache_alert_failure_suppresses_all_alerts_for_one_hour(m
 @pytest.mark.asyncio
 async def test_platform_cache_alert_post_sends_json_payload(monkeypatch):
     session = _FakeAlertSession()
-    monkeypatch.setattr(platform_cache_alerts, "get_http_client", lambda: SimpleNamespace(session=session))
+    lease = _FakeSessionLease(session)
+    monkeypatch.setattr(platform_cache_alerts, "lease_http_session", lambda: lease)
 
     await platform_cache_alerts._post_alert(
         "https://codex-lb-alert.cinamon.io/notify",
@@ -215,3 +232,5 @@ async def test_platform_cache_alert_post_sends_json_payload(monkeypatch):
             "json": {"api_key_suffix": "abcd", "client_version": "0.120.0"},
         }
     ]
+    assert lease.entered is True
+    assert lease.closed is True

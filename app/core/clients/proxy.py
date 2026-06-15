@@ -38,7 +38,7 @@ from aiohttp.http_websocket import WS_KEY, WebSocketReader, WebSocketWriter
 from multidict import CIMultiDict
 
 from app.core.clients.codex_version import get_codex_version_cache
-from app.core.clients.http import acquire_http_client, get_http_client, lease_http_session
+from app.core.clients.http import acquire_http_client, lease_http_session
 from app.core.config.settings import Settings, get_settings
 from app.core.conversation_archive import archive_json, archive_text
 from app.core.errors import (
@@ -2071,7 +2071,6 @@ async def fetch_codex_models(
     filtered_headers = filter_inbound_headers(headers)
     upstream_headers = _build_upstream_model_headers(filtered_headers, access_token, account_id)
     request_timeout = aiohttp.ClientTimeout(total=settings.upstream_connect_timeout_seconds)
-    client_session = session or get_http_client().session
     started_at = time.monotonic()
     status_code: int | None = None
     error_code: str | None = None
@@ -2085,65 +2084,66 @@ async def fetch_codex_models(
         payload_summary="-",
     )
     try:
-        async with _service_circuit_breaker_context(
-            client_session.get(
-                url,
-                headers=upstream_headers,
-                timeout=request_timeout,
-            ),
-            settings=settings,
-            account_id=account_id,
-        ) as resp:
-            status_code = resp.status
-            upstream_request_id = resp.headers.get("x-request-id") or resp.headers.get("request-id")
-            if resp.status >= 400:
-                error_payload = await _error_payload_from_response(resp)
-                error_code, error_message = _error_details_from_envelope(error_payload)
-                raise ProxyResponseError(
-                    resp.status,
-                    error_payload,
+        async with lease_http_session(session) as client_session:
+            async with _service_circuit_breaker_context(
+                client_session.get(
+                    url,
+                    headers=upstream_headers,
+                    timeout=request_timeout,
+                ),
+                settings=settings,
+                account_id=account_id,
+            ) as resp:
+                status_code = resp.status
+                upstream_request_id = resp.headers.get("x-request-id") or resp.headers.get("request-id")
+                if resp.status >= 400:
+                    error_payload = await _error_payload_from_response(resp)
+                    error_code, error_message = _error_details_from_envelope(error_payload)
+                    raise ProxyResponseError(
+                        resp.status,
+                        error_payload,
+                        upstream_request_id=upstream_request_id,
+                    )
+                try:
+                    data = await resp.json(content_type=None)
+                except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+                    message = str(exc) or "Request to upstream timed out"
+                    error_code = "upstream_unavailable"
+                    error_message = message
+                    raise ProxyResponseError(
+                        502,
+                        openai_error("upstream_unavailable", message),
+                        upstream_request_id=upstream_request_id,
+                    ) from exc
+                except Exception as exc:
+                    error_code = "upstream_error"
+                    error_message = "Invalid JSON from upstream"
+                    raise ProxyResponseError(
+                        502,
+                        openai_error("upstream_error", "Invalid JSON from upstream"),
+                        upstream_request_id=upstream_request_id,
+                    ) from exc
+                if not isinstance(data, dict):
+                    error_code = "upstream_error"
+                    error_message = "Unexpected upstream payload"
+                    raise ProxyResponseError(
+                        502,
+                        openai_error("upstream_error", error_message),
+                        upstream_request_id=upstream_request_id,
+                    )
+                raw_models = data.get("models")
+                if not isinstance(raw_models, list):
+                    error_code = "upstream_error"
+                    error_message = "Missing 'models' key in upstream response"
+                    raise ProxyResponseError(
+                        502,
+                        openai_error("upstream_error", error_message),
+                        upstream_request_id=upstream_request_id,
+                    )
+                return CodexModelsResult(
+                    payload=cast(dict[str, JsonValue], data),
                     upstream_request_id=upstream_request_id,
                 )
-            try:
-                data = await resp.json(content_type=None)
-            except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
-                message = str(exc) or "Request to upstream timed out"
-                error_code = "upstream_unavailable"
-                error_message = message
-                raise ProxyResponseError(
-                    502,
-                    openai_error("upstream_unavailable", message),
-                    upstream_request_id=upstream_request_id,
-                ) from exc
-            except Exception as exc:
-                error_code = "upstream_error"
-                error_message = "Invalid JSON from upstream"
-                raise ProxyResponseError(
-                    502,
-                    openai_error("upstream_error", "Invalid JSON from upstream"),
-                    upstream_request_id=upstream_request_id,
-                ) from exc
-            if not isinstance(data, dict):
-                error_code = "upstream_error"
-                error_message = "Unexpected upstream payload"
-                raise ProxyResponseError(
-                    502,
-                    openai_error("upstream_error", error_message),
-                    upstream_request_id=upstream_request_id,
-                )
-            raw_models = data.get("models")
-            if not isinstance(raw_models, list):
-                error_code = "upstream_error"
-                error_message = "Missing 'models' key in upstream response"
-                raise ProxyResponseError(
-                    502,
-                    openai_error("upstream_error", error_message),
-                    upstream_request_id=upstream_request_id,
-                )
-            return CodexModelsResult(
-                payload=cast(dict[str, JsonValue], data),
-                upstream_request_id=upstream_request_id,
-            )
     except ProxyResponseError as exc:
         if error_code is None and error_message is None:
             error_code, error_message = _error_details_from_envelope(exc.payload)

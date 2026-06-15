@@ -7,7 +7,7 @@ from typing import Protocol, cast
 
 import aiohttp
 
-from app.core.clients.http import get_http_client
+from app.core.clients.http import HttpClientLease, acquire_http_client, lease_http_session
 from app.core.clients.proxy import (
     as_image_fetch_session,
     current_compact_timeout_settings,
@@ -123,25 +123,25 @@ async def fetch_models(
     url = f"{base_url.rstrip('/')}/v1/models"
     headers = build_platform_headers(api_key, organization=organization, project=project)
     timeout = aiohttp.ClientTimeout(total=_MODELS_TIMEOUT_SECONDS)
-    session = get_http_client().session
-    async with session.get(url, headers=headers, timeout=timeout) as response:
-        payload = await _read_response_body(response)
-        if response.status >= 400:
-            raise OpenAIPlatformError(
-                response.status,
-                _normalize_error_payload(payload, response.status),
+    async with lease_http_session() as session:
+        async with session.get(url, headers=headers, timeout=timeout) as response:
+            payload = await _read_response_body(response)
+            if response.status >= 400:
+                raise OpenAIPlatformError(
+                    response.status,
+                    _normalize_error_payload(payload, response.status),
+                    upstream_request_id=response.headers.get("x-request-id"),
+                )
+            if not is_json_dict(payload):
+                raise OpenAIPlatformError(
+                    502,
+                    _server_error("invalid_platform_models_response"),
+                    upstream_request_id=response.headers.get("x-request-id"),
+                )
+            return PlatformModelsResponse(
+                payload=payload,
                 upstream_request_id=response.headers.get("x-request-id"),
             )
-        if not is_json_dict(payload):
-            raise OpenAIPlatformError(
-                502,
-                _server_error("invalid_platform_models_response"),
-                upstream_request_id=response.headers.get("x-request-id"),
-            )
-        return PlatformModelsResponse(
-            payload=payload,
-            upstream_request_id=response.headers.get("x-request-id"),
-        )
 
 
 async def create_response(
@@ -155,25 +155,28 @@ async def create_response(
     url = f"{base_url.rstrip('/')}/v1/responses"
     headers = build_platform_headers(api_key, organization=organization, project=project)
     timeout = aiohttp.ClientTimeout(total=_RESPONSES_TIMEOUT_SECONDS)
-    session = get_http_client().session
-    async with session.post(url, headers=headers, json=dict(payload), timeout=timeout) as response:
-        body = await _read_response_body(response)
-        if response.status >= 400:
-            raise OpenAIPlatformError(
-                response.status,
-                _normalize_error_payload(body, response.status),
-                upstream_request_id=response.headers.get("x-request-id"),
-            )
-        parsed = parse_response_payload(body)
-        if parsed is None:
-            if is_json_dict(body):
-                return PlatformResponseResult(payload=body, upstream_request_id=response.headers.get("x-request-id"))
-            raise OpenAIPlatformError(
-                502,
-                _server_error("invalid_platform_response"),
-                upstream_request_id=response.headers.get("x-request-id"),
-            )
-        return PlatformResponseResult(payload=parsed, upstream_request_id=response.headers.get("x-request-id"))
+    async with lease_http_session() as session:
+        async with session.post(url, headers=headers, json=dict(payload), timeout=timeout) as response:
+            body = await _read_response_body(response)
+            if response.status >= 400:
+                raise OpenAIPlatformError(
+                    response.status,
+                    _normalize_error_payload(body, response.status),
+                    upstream_request_id=response.headers.get("x-request-id"),
+                )
+            parsed = parse_response_payload(body)
+            if parsed is None:
+                if is_json_dict(body):
+                    return PlatformResponseResult(
+                        payload=body,
+                        upstream_request_id=response.headers.get("x-request-id"),
+                    )
+                raise OpenAIPlatformError(
+                    502,
+                    _server_error("invalid_platform_response"),
+                    upstream_request_id=response.headers.get("x-request-id"),
+                )
+            return PlatformResponseResult(payload=parsed, upstream_request_id=response.headers.get("x-request-id"))
 
 
 async def create_compact_response(
@@ -192,43 +195,43 @@ async def create_compact_response(
         configured_connect_timeout_seconds=settings.upstream_connect_timeout_seconds,
         configured_total_timeout_seconds=None,
     )
-    session = get_http_client().session
-    payload_dict = await maybe_inline_payload_input_images(
-        dict(payload),
-        session=as_image_fetch_session(session),
-        connect_timeout=connect_timeout,
-        total_timeout=total_timeout,
-    )
-    effective_total_timeout = total_timeout
-    if effective_total_timeout is not None:
-        effective_total_timeout = max(0.001, effective_total_timeout - (time.monotonic() - request_started_at))
-    effective_connect_timeout = connect_timeout
-    if effective_total_timeout is not None:
-        effective_connect_timeout = min(effective_connect_timeout, effective_total_timeout)
-    timeout = aiohttp.ClientTimeout(
-        total=effective_total_timeout,
-        sock_connect=effective_connect_timeout,
-        sock_read=effective_total_timeout,
-    )
-    async with session.post(url, headers=headers, json=payload_dict, timeout=timeout) as response:
-        body = await _read_response_body(response)
-        if response.status >= 400:
-            raise OpenAIPlatformError(
-                response.status,
-                _normalize_error_payload(body, response.status),
-                upstream_request_id=response.headers.get("x-request-id"),
-            )
-        parsed = parse_compact_response_payload(body)
-        if parsed is None:
-            raise OpenAIPlatformError(
-                502,
-                _server_error("invalid_platform_compact_response"),
-                upstream_request_id=response.headers.get("x-request-id"),
-            )
-        return PlatformCompactResponseResult(
-            payload=parsed,
-            upstream_request_id=response.headers.get("x-request-id"),
+    async with lease_http_session() as session:
+        payload_dict = await maybe_inline_payload_input_images(
+            dict(payload),
+            session=as_image_fetch_session(session),
+            connect_timeout=connect_timeout,
+            total_timeout=total_timeout,
         )
+        effective_total_timeout = total_timeout
+        if effective_total_timeout is not None:
+            effective_total_timeout = max(0.001, effective_total_timeout - (time.monotonic() - request_started_at))
+        effective_connect_timeout = connect_timeout
+        if effective_total_timeout is not None:
+            effective_connect_timeout = min(effective_connect_timeout, effective_total_timeout)
+        timeout = aiohttp.ClientTimeout(
+            total=effective_total_timeout,
+            sock_connect=effective_connect_timeout,
+            sock_read=effective_total_timeout,
+        )
+        async with session.post(url, headers=headers, json=payload_dict, timeout=timeout) as response:
+            body = await _read_response_body(response)
+            if response.status >= 400:
+                raise OpenAIPlatformError(
+                    response.status,
+                    _normalize_error_payload(body, response.status),
+                    upstream_request_id=response.headers.get("x-request-id"),
+                )
+            parsed = parse_compact_response_payload(body)
+            if parsed is None:
+                raise OpenAIPlatformError(
+                    502,
+                    _server_error("invalid_platform_compact_response"),
+                    upstream_request_id=response.headers.get("x-request-id"),
+                )
+            return PlatformCompactResponseResult(
+                payload=parsed,
+                upstream_request_id=response.headers.get("x-request-id"),
+            )
 
 
 async def stream_responses(
@@ -247,30 +250,41 @@ async def stream_responses(
         accept="text/event-stream",
     )
     timeout = aiohttp.ClientTimeout(total=_RESPONSES_TIMEOUT_SECONDS)
-    session = get_http_client().session
-    response = await session.post(url, headers=headers, json=dict(payload), timeout=timeout)
+    lease = await acquire_http_client()
+    try:
+        response = await lease.client.session.post(url, headers=headers, json=dict(payload), timeout=timeout)
+    except Exception:
+        await lease.close()
+        raise
     if response.status >= 400:
         try:
             body = await _read_response_body(response)
         finally:
             response.release()
+            await lease.close()
         raise OpenAIPlatformError(
             response.status,
             _normalize_error_payload(body, response.status),
             upstream_request_id=response.headers.get("x-request-id"),
         )
     return PlatformStreamResponse(
-        event_stream=_stream_response_events(response),
+        event_stream=_stream_response_events(response, lease=lease),
         upstream_request_id=response.headers.get("x-request-id"),
     )
 
 
-async def _stream_response_events(response: aiohttp.ClientResponse) -> AsyncIterator[str]:
+async def _stream_response_events(
+    response: aiohttp.ClientResponse,
+    *,
+    lease: HttpClientLease | None = None,
+) -> AsyncIterator[str]:
     try:
         async for event_block in _iter_sse_event_blocks(cast(_ChunkedResponse, response)):
             yield event_block
     finally:
         response.release()
+        if lease is not None:
+            await lease.close()
 
 
 def failed_event_payload(status_code: int, payload: dict[str, JsonValue]) -> str:
