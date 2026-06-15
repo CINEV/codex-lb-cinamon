@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime, timedelta
 
 import pytest
@@ -154,43 +153,6 @@ async def test_latest_by_account_primary_query_plan_uses_normalized_window_index
 
     details = " ".join(str(row[-1]) for row in plan_rows)
     assert "idx_usage_window_account_latest" in details
-
-
-@pytest.mark.asyncio
-async def test_latest_by_account_primary_query_plan_uses_normalized_window_index_postgresql(db_setup):
-    now = utcnow()
-    async with SessionLocal() as session:
-        if _dialect_name(session) != "postgresql":
-            pytest.skip("PostgreSQL-only query plan test")
-
-        accounts_repo = AccountsRepository(session)
-        repo = UsageRepository(session)
-        await accounts_repo.upsert(_make_account("acc1"))
-        await accounts_repo.upsert(_make_account("acc2"))
-
-        await repo.add_entry("acc1", 10.0, window=None, recorded_at=now - timedelta(hours=2))
-        await repo.add_entry("acc1", 20.0, window="primary", recorded_at=now)
-        await repo.add_entry("acc2", 30.0, window=None, recorded_at=now - timedelta(hours=1))
-        await repo.add_entry("acc2", 40.0, window="secondary", recorded_at=now)
-
-        await session.execute(text("SET enable_seqscan = off"))
-        plan = (
-            await session.execute(
-                text(
-                    """
-                    EXPLAIN (FORMAT JSON)
-                    SELECT DISTINCT ON (account_id) id
-                    FROM usage_history
-                    WHERE coalesce("window", 'primary') = 'primary'
-                    ORDER BY account_id ASC, recorded_at DESC, id DESC
-                    """
-                )
-            )
-        ).scalar_one()
-
-    plan_json = json.dumps(plan)
-    assert "idx_usage_window_account_latest" in plan_json or "idx_usage_window_account_time" in plan_json
-    assert "Seq Scan" not in plan_json
 
 
 @pytest.mark.asyncio

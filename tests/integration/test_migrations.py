@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-
 import pytest
 from anyio import to_thread
 from sqlalchemy import text
@@ -25,7 +23,6 @@ except ImportError:
 
 from app.db.migrate import (
     LEGACY_MIGRATION_ORDER,
-    check_schema_drift,
     inspect_migration_state,
     run_startup_migrations,
     run_upgrade,
@@ -34,21 +31,11 @@ from app.db.models import Account, AccountStatus
 from app.db.session import SessionLocal
 from app.modules.accounts.repository import AccountsRepository
 
-try:
-    from app.db.migrate import check_migration_policy as _check_migration_policy
-except ImportError:
-    check_migration_policy: Callable[[str], tuple[str, ...]] | None = None
-else:
-    check_migration_policy = _check_migration_policy
 pytestmark = pytest.mark.integration
 _DATABASE_URL = get_settings().database_url
 _HEAD_REVISION = inspect_migration_state(_DATABASE_URL).head_revision
 _STAMPED_AFTER_LEGACY_PREFIX_4 = OLD_TO_NEW_REVISION_MAP["004_add_accounts_chatgpt_account_id"]
 _STAMPED_AFTER_LEGACY_PREFIX_1 = OLD_TO_NEW_REVISION_MAP["001_normalize_account_plan_types"]
-
-
-def _is_postgresql_database_url(url: str) -> bool:
-    return url.startswith("postgresql+")
 
 
 def _make_account(account_id: str, email: str, plan_type: str) -> Account:
@@ -256,63 +243,6 @@ async def test_run_startup_migrations_handles_legacy_schema_table_and_legacy_ale
     result = await run_startup_migrations(_DATABASE_URL)
     assert result.bootstrap.stamped_revision is None
     assert result.current_revision == _HEAD_REVISION
-
-
-@pytest.mark.asyncio
-@pytest.mark.skipif(
-    (not _is_postgresql_database_url(_DATABASE_URL)) or check_migration_policy is None,
-    reason="PostgreSQL-only migration contract test",
-)
-async def test_postgresql_migration_contract_policy_and_drift_match(db_setup):
-    result = await run_startup_migrations(_DATABASE_URL)
-    assert result.current_revision == _HEAD_REVISION
-
-    assert check_migration_policy is not None
-    assert check_migration_policy(_DATABASE_URL) == ()
-    assert check_schema_drift(_DATABASE_URL) == ()
-
-
-@pytest.mark.asyncio
-@pytest.mark.skipif(
-    not _is_postgresql_database_url(_DATABASE_URL),
-    reason="PostgreSQL-only empty database migration test",
-)
-async def test_postgresql_upgrade_head_from_empty_database(db_setup):
-    async with SessionLocal() as session:
-        await session.execute(text("DROP SCHEMA public CASCADE"))
-        await session.execute(text("CREATE SCHEMA public"))
-        await session.commit()
-
-    result = await run_startup_migrations(_DATABASE_URL)
-    assert result.current_revision == _HEAD_REVISION
-
-    async with SessionLocal() as session:
-        revision_rows = await session.execute(text("SELECT version_num FROM alembic_version"))
-        revisions = sorted(str(row[0]) for row in revision_rows.fetchall())
-        assert revisions == [_HEAD_REVISION]
-
-
-@pytest.mark.asyncio
-@pytest.mark.skipif(
-    (not _is_postgresql_database_url(_DATABASE_URL)) or (not _HAS_REVISION_REMAP),
-    reason="PostgreSQL-only migration remap test",
-)
-async def test_postgresql_startup_migration_auto_remap_legacy_head(db_setup):
-    await run_startup_migrations(_DATABASE_URL)
-
-    async with SessionLocal() as session:
-        await session.execute(
-            text("UPDATE alembic_version SET version_num = :legacy"),
-            {"legacy": "013_add_dashboard_settings_routing_strategy"},
-        )
-        await session.commit()
-
-    result = await run_startup_migrations(_DATABASE_URL)
-    assert result.current_revision == _HEAD_REVISION
-
-    async with SessionLocal() as session:
-        version_num = (await session.execute(text("SELECT version_num FROM alembic_version LIMIT 1"))).scalar_one()
-        assert str(version_num) == _HEAD_REVISION
 
 
 @pytest.mark.asyncio

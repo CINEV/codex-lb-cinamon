@@ -21,6 +21,11 @@ The `/project-conventions` skill is auto-activated on code edits (PreToolUse gua
 - Treat local test execution as the push gate. If the host environment is insufficient, use `podman` to run the tests locally.
 - Do **not** require a container image build as part of the default push validation flow. Container builds are excluded unless the change specifically targets container packaging or runtime image behavior.
 
+## Upstream Merge Scope
+
+- When merging upstream changes, do not import Helm-specific tests, PostgreSQL-only CI jobs, or PostgreSQL-only test cases by default.
+- If those upstream tests appear mandatory for the requested change, stop and ask the user before bringing them into this fork. Otherwise leave them out while preserving runtime code needed by the fork.
+
 ## Workflow (OpenSpec-first)
 
 This repo uses **OpenSpec as the primary workflow and SSOT** for change-driven development.

@@ -30,32 +30,30 @@ The Helm chart MUST document and support three primary install modes: bundled Po
 - **WHEN** external secrets mode is enabled without `externalSecrets.secretStoreRef.name`
 - **THEN** Helm rendering fails with an explicit configuration error
 
-### Requirement: Helm chart checks are automated
+### Requirement: Helm chart checks are not default CI gates
 
-The project MUST run automated OpenSpec and Helm render checks in CI for the reference chart. The Helm checks MUST cover the production External Secrets overlay failure path and a successful render path with an explicit placeholder SecretStore reference.
+The fork MUST NOT require Helm lint, Helm render, kubeconform, or kind smoke checks as default CI gates unless a change explicitly targets Helm deployment behavior.
 
-#### Scenario: Production External Secrets overlay fails without store name
+#### Scenario: Default CI excludes Helm checks
 
-- **WHEN** CI renders `values-prod.yaml` without `externalSecrets.secretStoreRef.name`
-- **THEN** Helm rendering fails with an explicit configuration error
+- **WHEN** the standard CI workflow runs for a non-Helm change
+- **THEN** it does not require Helm lint, render, kubeconform, or kind smoke jobs
 
-#### Scenario: Production External Secrets overlay renders with store name
+#### Scenario: Helm-specific changes may opt in
 
-- **WHEN** CI renders `values-prod.yaml` with `externalSecrets.secretStoreRef.name`
-- **THEN** Helm rendering succeeds
-- **AND** the ExternalSecret contains the configured SecretStore reference
+- **WHEN** a change explicitly targets Helm deployment behavior
+- **THEN** maintainers may run Helm checks manually or add a scoped validation path for that change
 
 ### Requirement: Helm support policy is pinned to modern Kubernetes minors
 
-The chart MUST declare a minimum supported Kubernetes version of `1.32`, and CI MUST validate chart rendering against a `1.35` baseline instead of older legacy minors.
+The chart MUST declare a minimum supported Kubernetes version of `1.32`, but the fork does not require Kubernetes render validation as a default CI gate.
 
 #### Scenario: Chart metadata declares the minimum supported version
 
 - **WHEN** a user inspects the chart metadata and README
 - **THEN** the documented minimum supported Kubernetes version is `1.32`
 
-#### Scenario: CI validates the modern baseline
+#### Scenario: CI does not require Kubernetes render validation
 
-- **WHEN** CI runs Helm render validation
-- **THEN** the validation set includes Kubernetes `1.35`
-- **AND** pre-`1.32` validation targets are not treated as the support baseline
+- **WHEN** standard CI runs for a non-Helm change
+- **THEN** Kubernetes render validation is not required

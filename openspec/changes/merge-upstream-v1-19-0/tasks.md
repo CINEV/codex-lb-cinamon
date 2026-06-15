@@ -34,3 +34,9 @@
 - [x] 4.2 Commit the merge and OpenSpec artifacts.
 - [x] 4.3 Push the branch to `origin`.
 - [x] 4.4 Report actual checks run, any blocked checks, and the pushed branch.
+
+## 5. Follow-up Test Gate Scope
+
+- [x] 5.1 Remove Helm-specific CI jobs, Make targets, and unit tests from the fork merge branch.
+- [x] 5.2 Remove PostgreSQL-only CI jobs, Make targets, and integration test cases from the fork merge branch.
+- [x] 5.3 Document that future upstream merges must not import Helm/PostgreSQL-only tests by default and must ask the user first if they appear mandatory.

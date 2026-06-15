@@ -42,13 +42,9 @@ CODEX_LB_REQUIRED_CHECKS = frozenset(
         "Tests (pytest, integration-core)",
         "Tests (pytest, integration-bridge)",
         "Tests (pytest, e2e)",
-        "Tests (pytest, PostgreSQL)",
         "Migration check (alembic)",
-        "Migration check (alembic, PostgreSQL)",
         "Package (build)",
         "Docker build",
-        "Helm lint + template + kubeconform",
-        "Helm smoke install (kind)",
         "CI Required",
     }
 )
