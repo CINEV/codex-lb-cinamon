@@ -52,9 +52,6 @@ from app.core.clients.proxy import thread_goal_request as core_thread_goal_reque
 from app.core.clients.proxy_websocket import (
     UpstreamResponsesWebSocket as UpstreamResponsesWebSocket,
 )
-from app.core.clients.proxy_websocket import (
-    connect_responses_websocket as connect_responses_websocket,
-)
 from app.core.config.settings import get_settings
 from app.core.config.settings_cache import get_settings_cache
 from app.core.crypto import TokenEncryptor
@@ -761,6 +758,11 @@ async def core_compact_responses(*args: Any, **kwargs: Any) -> Any:
 
 def core_stream_responses(*args: Any, **kwargs: Any) -> AsyncIterator[str]:
     return _provider_adapters.core_stream_responses(*args, **kwargs)
+
+
+async def connect_responses_websocket(*args: Any, **kwargs: Any) -> UpstreamResponsesWebSocket:
+    func = _provider_adapters.connect_responses_websocket
+    return await func(*args, **_supported_optional_kwargs(func, kwargs, {}))
 
 
 _UPSTREAM_RESPONSE_CREATE_MAX_BYTES = get_settings().upstream_response_create_max_bytes

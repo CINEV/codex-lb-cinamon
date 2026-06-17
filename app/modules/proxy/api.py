@@ -2472,15 +2472,10 @@ async def _stream_responses(
         owns_reservation=owns_reservation,
         reservation=reservation,
     )
-    hard_backend_affinity_header = (
-        not enforce_openai_sdk_contract
-        and _platform_session_header_continuity_hint(BACKEND_CODEX_HTTP_ROUTE_FAMILY, effective_headers) is not None
+    stream = _normalize_public_responses_stream(
+        stream,
+        enforce_openai_sdk_contract=enforce_openai_sdk_contract,
     )
-    if enforce_openai_sdk_contract or not hard_backend_affinity_header:
-        stream = _normalize_public_responses_stream(
-            stream,
-            enforce_openai_sdk_contract=enforce_openai_sdk_contract,
-        )
     keepalive_frame = CODEX_KEEPALIVE_FRAME if not enforce_openai_sdk_contract else SSE_KEEPALIVE_FRAME
     return StreamingResponse(
         inject_sse_keepalives(
