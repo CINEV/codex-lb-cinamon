@@ -2344,9 +2344,7 @@ async def test_backend_codex_compact_falls_back_to_platform_when_secondary_usage
         ("/backend-api/codex/responses", ["backend_codex_http"], "provider_transport_unsupported", "transport"),
     ],
 )
-@pytest.mark.asyncio
-async def test_platform_only_websocket_routes_reject_before_upstream_transport(
-    async_client,
+def test_platform_only_websocket_routes_reject_before_upstream_transport(
     app_instance,
     monkeypatch,
     path: str,
@@ -2365,7 +2363,6 @@ async def test_platform_only_websocket_routes_reject_before_upstream_transport(
         del self, args, kwargs
         raise AssertionError("rejected websocket path must not start upstream transport")
 
-    await _insert_platform_identity_direct(route_families=route_families)
     monkeypatch.setattr(proxy_api_module, "_websocket_firewall_denial_response", allow_firewall)
     monkeypatch.setattr(proxy_api_module, "validate_proxy_api_key_authorization", allow_proxy_auth)
     monkeypatch.setattr(
@@ -2374,7 +2371,12 @@ async def test_platform_only_websocket_routes_reject_before_upstream_transport(
         fail_proxy_responses_websocket,
     )
 
+    async def seed_platform_identity() -> str:
+        return await _insert_platform_identity_direct(route_families=route_families)
+
     with TestClient(app_instance) as client:
+        assert client.portal is not None
+        client.portal.call(seed_platform_identity)
         with pytest.raises(WebSocketDenialResponse) as excinfo:
             with client.websocket_connect(path):
                 pass
@@ -2777,7 +2779,7 @@ async def test_backend_codex_responses_with_sticky_turn_state_keeps_chatgpt_when
         assert response.status_code == 200
         lines = [line async for line in response.aiter_lines() if line]
 
-    events = [json.loads(line[6:]) for line in lines if line.startswith("data: ")]
+    events = [json.loads(line[6:]) for line in lines if line.startswith("data: ") and line[6:] != "[DONE]"]
     assert [event.get("type") for event in events] == ["response.created", "response.completed"]
     assert events[-1]["response"]["id"] == "resp_backend_http_sticky_chatgpt"
 

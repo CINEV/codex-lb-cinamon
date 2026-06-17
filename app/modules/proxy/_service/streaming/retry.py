@@ -231,7 +231,7 @@ class _StreamingRetryMixin:
                     sticky_kind=affinity.kind,
                     sticky_max_age_seconds=affinity.max_age_seconds,
                 )
-                if preferred_account_id is not None:
+                if preferred_account_id is not None and not affinity.budget_reallocation_enabled:
                     file_required_preferred_account = True
             if preferred_account_id is None:
                 # ``input_file.file_id`` references must land on the account
