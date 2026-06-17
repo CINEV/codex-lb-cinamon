@@ -11,11 +11,14 @@ import pytest
 from scripts.release_versions import update_project_versions
 
 
-def write_minimal_release_files(root: Path, version: str = "1.20.0") -> None:
+def write_minimal_release_files(root: Path, version: str = "1.20.0", package_name: str = "codex-lb") -> None:
     (root / "app").mkdir(parents=True)
     (root / "frontend").mkdir(parents=True)
     (root / "deploy" / "helm" / "codex-lb").mkdir(parents=True)
-    (root / "pyproject.toml").write_text(f'[project]\nname = "codex-lb"\nversion = "{version}"\n', encoding="utf-8")
+    (root / "pyproject.toml").write_text(
+        f'[project]\nname = "{package_name}"\nversion = "{version}"\n',
+        encoding="utf-8",
+    )
     (root / "app" / "__init__.py").write_text(f'__version__ = "{version}"\n', encoding="utf-8")
     (root / "frontend" / "package.json").write_text(
         json.dumps({"name": "frontend", "version": version}) + "\n",
@@ -26,7 +29,7 @@ def write_minimal_release_files(root: Path, version: str = "1.20.0") -> None:
         encoding="utf-8",
     )
     (root / "uv.lock").write_text(
-        f'[[package]]\nname = "codex-lb"\nversion = "{version}"\nsource = {{ editable = "." }}\n',
+        f'[[package]]\nname = "{package_name}"\nversion = "{version}"\nsource = {{ editable = "." }}\n',
         encoding="utf-8",
     )
 
@@ -35,8 +38,8 @@ def git(root: Path, *args: str) -> str:
     return subprocess.check_output(["git", *args], cwd=root, text=True).strip()
 
 
-def init_repo_with_beta_commit(root: Path, version: str = "1.20.0-beta.3") -> str:
-    write_minimal_release_files(root)
+def init_repo_with_beta_commit(root: Path, version: str = "1.20.0-beta.3", package_name: str = "codex-lb") -> str:
+    write_minimal_release_files(root, package_name=package_name)
     git(root, "init")
     git(root, "config", "user.email", "test@example.com")
     git(root, "config", "user.name", "Test")
@@ -467,6 +470,28 @@ def test_pr_guard_accepts_validated_canonical_beta_pr(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     sha = init_repo_with_beta_commit(repo)
+    branch = "release/beta-1.20.0-beta.3"
+    event = event_file(tmp_path, head_ref=branch, head_sha=sha, body=validation_body(sha))
+
+    result = run_guard(
+        Path(__file__).resolve().parents[2],
+        repo,
+        "--base-ref",
+        "HEAD~1",
+        "--head-ref",
+        branch,
+        "--event-path",
+        str(event),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Beta release PR guard passed" in result.stdout
+
+
+def test_pr_guard_accepts_validated_canonical_beta_pr_for_fork_package_name(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    sha = init_repo_with_beta_commit(repo, package_name="codex-lb-cinamon")
     branch = "release/beta-1.20.0-beta.3"
     event = event_file(tmp_path, head_ref=branch, head_sha=sha, body=validation_body(sha))
 

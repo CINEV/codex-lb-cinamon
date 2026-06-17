@@ -22,11 +22,14 @@ from scripts.release_versions import (
 )
 
 
-def write_minimal_release_files(root: Path, version: str = "1.18.2") -> None:
+def write_minimal_release_files(root: Path, version: str = "1.18.2", package_name: str = "codex-lb") -> None:
     (root / "app").mkdir(parents=True)
     (root / "frontend").mkdir(parents=True)
     (root / "deploy" / "helm" / "codex-lb").mkdir(parents=True)
-    (root / "pyproject.toml").write_text(f'[project]\nname = "codex-lb"\nversion = "{version}"\n', encoding="utf-8")
+    (root / "pyproject.toml").write_text(
+        f'[project]\nname = "{package_name}"\nversion = "{version}"\n',
+        encoding="utf-8",
+    )
     (root / "app" / "__init__.py").write_text(
         f'__version__ = "{version}"  # x-release-please-version\n', encoding="utf-8"
     )
@@ -38,7 +41,7 @@ def write_minimal_release_files(root: Path, version: str = "1.18.2") -> None:
         encoding="utf-8",
     )
     (root / "uv.lock").write_text(
-        f'[[package]]\nname = "codex-lb"\nversion = "{version}"\nsource = {{ editable = "." }}\n',
+        f'[[package]]\nname = "{package_name}"\nversion = "{version}"\nsource = {{ editable = "." }}\n',
         encoding="utf-8",
     )
 
@@ -119,6 +122,15 @@ def test_update_project_versions_keeps_all_release_files_in_sync(tmp_path: Path)
     assert_project_versions(tmp_path, "1.19.0-beta.1")
     package_version = json.loads((tmp_path / "frontend" / "package.json").read_text(encoding="utf-8"))["version"]
     assert package_version == "1.19.0-beta.1"
+
+
+def test_update_project_versions_uses_pyproject_package_name_for_uv_lock(tmp_path: Path) -> None:
+    write_minimal_release_files(tmp_path, package_name="codex-lb-cinamon")
+
+    update_project_versions(tmp_path, "1.20.1")
+
+    assert_project_versions(tmp_path, "1.20.1")
+    assert 'name = "codex-lb-cinamon"\nversion = "1.20.1"' in (tmp_path / "uv.lock").read_text(encoding="utf-8")
 
 
 def test_assert_project_versions_accepts_pep440_uv_lock_prerelease(tmp_path: Path) -> None:

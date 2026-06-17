@@ -21,3 +21,10 @@ The merged deployment and install surfaces MUST report version `1.20.0` while pr
 - **WHEN** release automation evaluates the merged fork for publication
 - **THEN** it MUST verify that the fork release tag points at the merged fork commit
 - **AND** it MUST NOT rely on an upstream tag object solely because the tag name matches
+
+#### Scenario: Release Please can advance the fork patch train
+
+- **WHEN** release-managed files are validated after the merge
+- **THEN** the manifest and package version surfaces MUST be consistent at `1.20.0`
+- **AND** release helpers MUST read the fork package name from `pyproject.toml` when validating `uv.lock`
+- **AND** the next stable Release Please patch PR MUST be able to advance the fork train to `1.20.1`

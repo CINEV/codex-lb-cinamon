@@ -21,6 +21,7 @@ from scripts.release_versions import (
     ReleaseVersion,
     parse_version,
     read_project_versions,
+    read_pyproject_name_text,
     read_pyproject_version,
     read_pyproject_version_text,
 )
@@ -164,6 +165,8 @@ def _read_ref_text(root: Path, ref: str, path: str) -> str:
 
 
 def _read_project_versions_at_ref(root: Path, ref: str) -> dict[str, str]:
+    pyproject_text = _read_ref_text(root, ref, "pyproject.toml")
+    package_name = read_pyproject_name_text(pyproject_text)
     package_data = json.loads(_read_ref_text(root, ref, "frontend/package.json"))
     chart_text = _read_ref_text(root, ref, "deploy/helm/codex-lb/Chart.yaml")
     uv_text = _read_ref_text(root, ref, "uv.lock")
@@ -175,7 +178,7 @@ def _read_project_versions_at_ref(root: Path, ref: str) -> dict[str, str]:
         return match.group(1)
 
     return {
-        "pyproject.toml": read_pyproject_version_text(_read_ref_text(root, ref, "pyproject.toml")),
+        "pyproject.toml": read_pyproject_version_text(pyproject_text),
         "app/__init__.py": find(
             r'^__version__ = "([^"]+)"',
             _read_ref_text(root, ref, "app/__init__.py"),
@@ -185,9 +188,11 @@ def _read_project_versions_at_ref(root: Path, ref: str) -> dict[str, str]:
         "deploy/helm/codex-lb/Chart.yaml version": find(r"^version: (.+)$", chart_text, "chart version"),
         "deploy/helm/codex-lb/Chart.yaml appVersion": find(r"^appVersion: (.+)$", chart_text, "chart appVersion"),
         "uv.lock": find(
-            r'\[\[package\]\]\nname = "codex-lb"\nversion = "([^"]+)"\nsource = \{ editable = "\." \}',
+            r'\[\[package\]\]\nname = "'
+            + re.escape(package_name)
+            + r'"\nversion = "([^"]+)"\nsource = \{ editable = "\." \}',
             uv_text,
-            "uv.lock codex-lb version",
+            f"uv.lock {package_name} version",
         ),
     }
 

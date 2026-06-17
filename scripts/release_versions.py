@@ -80,15 +80,27 @@ def parse_tag(tag: str) -> ReleaseVersion:
     return parse_version(match.group("version"))
 
 
-def read_pyproject_version_text(text: str) -> str:
+def _read_pyproject_project_string(text: str, field: str) -> str:
     data = tomllib.loads(text)
     project = data.get("project")
     if not isinstance(project, dict):
         raise ValueError("could not find [project] table in pyproject.toml")
-    version = project.get("version")
-    if not isinstance(version, str) or not version:
-        raise ValueError("could not find [project] version in pyproject.toml")
-    return version
+    value = project.get(field)
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"could not find [project] {field} in pyproject.toml")
+    return value
+
+
+def read_pyproject_name_text(text: str) -> str:
+    return _read_pyproject_project_string(text, "name")
+
+
+def read_pyproject_version_text(text: str) -> str:
+    return _read_pyproject_project_string(text, "version")
+
+
+def read_pyproject_name(root: Path) -> str:
+    return read_pyproject_name_text((root / "pyproject.toml").read_text(encoding="utf-8"))
 
 
 def read_pyproject_version(root: Path) -> str:
@@ -117,6 +129,7 @@ def update_project_versions(root: Path, version: str) -> None:
     parse_version(version)
 
     pyproject = root / "pyproject.toml"
+    package_name = read_pyproject_name(root)
     _write_text(
         pyproject,
         _replace_once(
@@ -152,17 +165,20 @@ def update_project_versions(root: Path, version: str) -> None:
     uv_lock = root / "uv.lock"
     uv_text = uv_lock.read_text(encoding="utf-8")
     uv_text, count = re.subn(
-        r'(\[\[package\]\]\nname = "codex-lb"\nversion = ")[^"]+("\nsource = \{ editable = "\." \})',
+        r'(\[\[package\]\]\nname = "'
+        + re.escape(package_name)
+        + r'"\nversion = ")[^"]+("\nsource = \{ editable = "\." \})',
         rf"\g<1>{version}\2",
         uv_text,
         count=1,
     )
     if count != 1:
-        raise ValueError("expected exactly one codex-lb package entry in uv.lock")
+        raise ValueError(f"expected exactly one {package_name} package entry in uv.lock")
     _write_text(uv_lock, uv_text)
 
 
 def read_project_versions(root: Path) -> dict[str, str]:
+    package_name = read_pyproject_name(root)
     package_data = json.loads((root / "frontend" / "package.json").read_text(encoding="utf-8"))
     chart_text = (root / "deploy" / "helm" / "codex-lb" / "Chart.yaml").read_text(encoding="utf-8")
     uv_text = (root / "uv.lock").read_text(encoding="utf-8")
@@ -184,9 +200,11 @@ def read_project_versions(root: Path) -> dict[str, str]:
         "deploy/helm/codex-lb/Chart.yaml version": find(r"^version: (.+)$", chart_text, "chart version"),
         "deploy/helm/codex-lb/Chart.yaml appVersion": find(r"^appVersion: (.+)$", chart_text, "chart appVersion"),
         "uv.lock": find(
-            r'\[\[package\]\]\nname = "codex-lb"\nversion = "([^"]+)"\nsource = \{ editable = "\." \}',
+            r'\[\[package\]\]\nname = "'
+            + re.escape(package_name)
+            + r'"\nversion = "([^"]+)"\nsource = \{ editable = "\." \}',
             uv_text,
-            "uv.lock codex-lb version",
+            f"uv.lock {package_name} version",
         ),
     }
 
