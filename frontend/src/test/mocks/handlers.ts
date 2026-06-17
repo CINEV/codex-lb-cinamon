@@ -496,7 +496,7 @@ export const handlers = [
         {
           error: {
             code: "platform_identity_prerequisite_failed",
-            message: "At least one active ChatGPT account is required",
+            message: "OpenAI Platform fallback requires at least one active ChatGPT-web account.",
           },
         },
         { status: 409 },
@@ -511,7 +511,7 @@ export const handlers = [
         {
           error: {
             code: "platform_identity_conflict",
-            message: "Platform identity already exists",
+            message: "Only one OpenAI Platform fallback key can be registered.",
           },
         },
         { status: 409 },

@@ -179,6 +179,7 @@ from app.modules.proxy.api_key_usage import estimate_api_key_request_usage
 from app.modules.proxy.helpers import (
     _normalize_error_code,
 )
+from app.modules.upstream_identities.types import CHATGPT_WEB_PROVIDER_KIND
 
 logger = logging.getLogger("app.modules.proxy.service")
 T = TypeVar("T")
@@ -199,6 +200,21 @@ _SECURITY_WORK_NO_AUTHORIZED_ACCOUNTS_MESSAGE = (
 )
 _HTTP_BRIDGE_BACKGROUND_CLOSE_TIMEOUT_SECONDS = 5.0
 _HTTP_BRIDGE_BACKGROUND_CLEANUP_WARN_THRESHOLD = 100
+
+
+async def _sticky_chatgpt_preferred_account_id(self: Any, affinity: _AffinityPolicy) -> str | None:
+    if affinity.key is None or affinity.kind != StickySessionKind.CODEX_SESSION:
+        return None
+    async with self._repo_factory() as repos:
+        sticky_target = await repos.sticky_sessions.get_target(
+            affinity.key,
+            kind=affinity.kind,
+            provider_kind=CHATGPT_WEB_PROVIDER_KIND,
+            max_age_seconds=affinity.max_age_seconds,
+        )
+    if sticky_target is None:
+        return None
+    return sticky_target.account_id
 
 
 def _proxy_error_code_message(exc: ProxyResponseError) -> tuple[str | None, str | None]:
@@ -277,6 +293,7 @@ class _HTTPBridgeStreamingMixin:
         forwarded_request: bool = False,
         forwarded_affinity_kind: str | None = None,
         forwarded_affinity_key: str | None = None,
+        codex_session_budget_reallocation_enabled: bool = True,
     ) -> AsyncIterator[str]:
         _maybe_log_proxy_request_payload("stream_http", payload, headers)
         proxy_api_authorization = _header_value_case_insensitive(headers, "authorization")
@@ -295,6 +312,7 @@ class _HTTPBridgeStreamingMixin:
             proxy_api_authorization=proxy_api_authorization,
             forwarded_affinity_kind=forwarded_affinity_kind,
             forwarded_affinity_key=forwarded_affinity_key,
+            codex_session_budget_reallocation_enabled=codex_session_budget_reallocation_enabled,
         )
 
     async def _stream_http_bridge_or_retry(
@@ -586,6 +604,11 @@ class _HTTPBridgeStreamingMixin:
             )
             else request_state.preferred_account_id
         )
+        if request_state.preferred_account_id is None and bridge_session_key.strength == "hard":
+            request_state.preferred_account_id = await _sticky_chatgpt_preferred_account_id(self, affinity)
+        file_required_preferred_account = False
+        if request_state.preferred_account_id is not None and bridge_session_key.strength == "hard":
+            file_required_preferred_account = True
         if request_state.previous_response_id is not None and request_state.preferred_account_id is None:
             request_state.preferred_account_id = await self._http_bridge_local_owner_account_id(
                 key=bridge_session_key,
@@ -600,7 +623,6 @@ class _HTTPBridgeStreamingMixin:
                 session_id=request_state.session_id,
                 surface="http_bridge",
             )
-        file_required_preferred_account = False
         if request_state.preferred_account_id is None:
             # ``input_file.file_id`` references must land on the account
             # that registered the upload (chatgpt-account-id-scoped).

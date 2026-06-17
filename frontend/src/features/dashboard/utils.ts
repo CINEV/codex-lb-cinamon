@@ -194,7 +194,6 @@ export function buildRemainingItems(
   const usageAccounts = accounts.filter((account) => account.providerKind !== "openai_platform");
   const usageIndex = buildWindowIndex(window);
   const palette = buildDonutPalette(usageAccounts.length, isDark);
-  const duplicateAccountIds = buildDuplicateAccountIdSet(usageAccounts);
 
   return usageAccounts
     .map((account, index) => {
@@ -207,9 +206,8 @@ export function buildRemainingItems(
       const remaining = usageIndex.get(account.accountId) ?? 0;
       const rawLabel = account.displayName || account.email || account.accountId;
       const labelIsEmail = !!account.email && rawLabel === account.email;
-      const labelSuffix = account.isEmailDuplicate === true || duplicateAccountIds.has(account.accountId)
-        ? ` (${formatCompactAccountId(account.accountId, 5, 4)})`
-        : "";
+      const labelSuffix =
+        account.isEmailDuplicate === true ? ` (${formatCompactAccountId(account.accountId, 5, 4)})` : "";
       return {
         accountId: account.accountId,
         label: rawLabel,

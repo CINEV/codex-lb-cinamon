@@ -434,6 +434,7 @@ class _StreamingMixin(_StreamingRetryMixin):
         api_key_reservation: ApiKeyUsageReservationData | None = None,
         suppress_text_done_events: bool = False,
         request_transport: str = _REQUEST_TRANSPORT_HTTP,
+        codex_session_budget_reallocation_enabled: bool = True,
     ) -> AsyncIterator[str]:
         proxy = cast(_StreamingServiceProtocol, self)
         _maybe_log_proxy_request_payload("stream", payload, headers)
@@ -448,6 +449,7 @@ class _StreamingMixin(_StreamingRetryMixin):
             api_key_reservation=api_key_reservation,
             suppress_text_done_events=suppress_text_done_events,
             request_transport=request_transport,
+            codex_session_budget_reallocation_enabled=codex_session_budget_reallocation_enabled,
         )
 
     async def _resolve_upstream_route_for_account(

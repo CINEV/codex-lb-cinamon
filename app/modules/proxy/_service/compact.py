@@ -11,6 +11,7 @@ import aiohttp
 
 from app.core.auth.refresh import RefreshError
 from app.core.balancer import ResetPreferenceWindow, RoutingStrategy, failover_decision
+from app.core.clients.openai_platform import OpenAIPlatformError
 from app.core.clients.proxy import (
     ProxyResponseError,
     UpstreamProxyRouteTrace,
@@ -45,7 +46,16 @@ from app.modules.proxy.affinity import (
 from app.modules.proxy.api_key_usage import estimate_api_key_request_usage
 from app.modules.proxy.helpers import _header_account_id, _normalize_error_code, _parse_openai_error
 from app.modules.proxy.load_balancer import AccountLease, AccountSelection
+from app.modules.proxy.provider_adapters import (
+    OpenAIPlatformProviderAdapter,
+    ProviderCompactResponseResult,
+)
 from app.modules.proxy.work_admission import AdmissionLease, WorkAdmissionController
+from app.modules.upstream_identities.types import (
+    BACKEND_CODEX_HTTP_ROUTE_FAMILY,
+    CHATGPT_PRIVATE_ROUTE_CLASS,
+    OPENAI_PLATFORM_PROVIDER_KIND,
+)
 
 logger = logging.getLogger("app.modules.proxy.service")
 T = TypeVar("T")
@@ -112,6 +122,47 @@ class _CompactServiceProtocol(Protocol):
     ) -> None: ...
 
     async def _write_request_log(self, **kwargs: Any) -> None: ...
+
+    async def _record_platform_auth_failure(self, identity_id: str, exc: OpenAIPlatformError) -> None: ...
+
+    def _platform_provider_subject(self, identity: Any) -> Any: ...
+
+    def _provider_adapter(self, provider_kind: str) -> Any: ...
+
+    def platform_api_key_suffix(self, identity: Any) -> str | None: ...
+
+    async def record_platform_cache_observation(
+        self,
+        *,
+        input_tokens: int | None,
+        cached_input_tokens: int | None,
+        client_version: str | None = None,
+        identity: Any | None = None,
+        api_key_suffix: str | None = None,
+    ) -> bool: ...
+
+    async def select_platform_identity(
+        self,
+        route_family: str,
+        *,
+        sticky_key: str | None = None,
+        sticky_kind: StickySessionKind | None = None,
+        reallocate_sticky: bool = False,
+        sticky_max_age_seconds: int | None = None,
+        exclude_routing_subject_ids: set[str] | None = None,
+    ) -> Any | None: ...
+
+    @staticmethod
+    def _platform_affinity_for_selection(
+        *,
+        sticky_key: str | None,
+        sticky_kind: StickySessionKind | None,
+        reallocate_sticky: bool,
+        sticky_max_age_seconds: int | None,
+        platform_sticky_key: str | None = None,
+        platform_sticky_kind: StickySessionKind | None = None,
+        platform_sticky_max_age_seconds: int | None = None,
+    ) -> tuple[str | None, StickySessionKind | None, bool, int | None]: ...
 
 
 def _service_module() -> Any:
@@ -392,6 +443,9 @@ class _CompactMixin:
         openai_cache_affinity: bool = False,
         api_key: ApiKeyData | None = None,
         api_key_reservation: ApiKeyUsageReservationData | None = None,
+        selected_subject: object | None = None,
+        route_family: str = BACKEND_CODEX_HTTP_ROUTE_FAMILY,
+        route_class: str = CHATGPT_PRIVATE_ROUTE_CLASS,
         codex_session_budget_reallocation_enabled: bool = True,
     ) -> CompactResponsePayload:
         proxy = cast(_CompactServiceProtocol, self)
@@ -415,6 +469,11 @@ class _CompactMixin:
         route_endpoint_id: str | None = None
         route_fallback_used: bool | None = None
         route_fail_closed_reason: str | None = None
+        provider_kind_value: str | None = None
+        routing_subject_id_value: str | None = None
+        upstream_request_id: str | None = None
+        log_rejection_reason: str | None = None
+        platform_api_key_suffix_value: str | None = None
         proxy._raise_for_unsupported_input_image_references(payload)
         rewritten_file_account_id = await proxy._resolve_file_account_for_responses(payload, headers)
         settings = await _service_get_settings_cache().get()
@@ -555,6 +614,132 @@ class _CompactMixin:
                         create_lease.release()
                     await proxy._load_balancer.release_account_lease(account_response_create_lease)
                     _service_pop_compact_timeout_overrides(timeout_tokens)
+
+            selected_platform_subject = getattr(_service_module(), "SelectedPlatformSubject", None)
+            if selected_platform_subject is not None and isinstance(selected_subject, selected_platform_subject):
+                platform_subject = cast(Any, selected_subject)
+                provider_kind_value = OPENAI_PLATFORM_PROVIDER_KIND
+                request_service_tier = payload.platform_forwarded_service_tier()
+                current_identity = platform_subject.identity
+                platform_api_key_suffix_value = proxy.platform_api_key_suffix(current_identity)
+                (
+                    platform_sticky_key,
+                    platform_sticky_kind,
+                    platform_reallocate_sticky,
+                    platform_sticky_max_age_seconds,
+                ) = proxy._platform_affinity_for_selection(
+                    sticky_key=affinity.key,
+                    sticky_kind=affinity.kind,
+                    reallocate_sticky=affinity.reallocate_sticky,
+                    sticky_max_age_seconds=affinity.max_age_seconds,
+                    platform_sticky_key=affinity.platform_key,
+                    platform_sticky_kind=affinity.platform_kind,
+                    platform_sticky_max_age_seconds=affinity.platform_max_age_seconds,
+                )
+                excluded_identity_ids: set[str] = set()
+                safe_retry_budget = _compact_same_contract_retry_budget()
+                transient_retries = 0
+
+                async def _call_platform_compact(identity: Any) -> ProviderCompactResponseResult:
+                    remaining_budget = _remaining_budget_seconds(deadline)
+                    if remaining_budget <= 0:
+                        logger.warning(
+                            "Compact request budget exhausted before upstream call request_id=%s", request_id
+                        )
+                        _raise_proxy_budget_exhausted()
+                    if base_settings.upstream_compact_timeout_seconds is None:
+                        timeout_tokens = _service_push_compact_timeout_overrides(
+                            connect_timeout_seconds=remaining_budget
+                        )
+                    else:
+                        timeout_tokens = _service_push_compact_timeout_overrides(
+                            connect_timeout_seconds=remaining_budget,
+                            total_timeout_seconds=remaining_budget,
+                        )
+                    create_lease = await proxy._get_work_admission().acquire_response_create(compact=True)
+                    try:
+                        adapter = cast(
+                            OpenAIPlatformProviderAdapter,
+                            proxy._provider_adapter(OPENAI_PLATFORM_PROVIDER_KIND),
+                        )
+                        return await adapter.compact_response(
+                            proxy._platform_provider_subject(identity),
+                            payload,
+                            filtered,
+                            route_class=route_class,
+                        )
+                    finally:
+                        create_lease.release()
+                        _service_pop_compact_timeout_overrides(timeout_tokens)
+
+                while True:
+                    routing_subject_id_value = current_identity.id
+                    try:
+                        platform_result = await _call_platform_compact(current_identity)
+                        upstream_request_id = platform_result.upstream_request_id
+                        response = platform_result.payload
+                        actual_service_tier = _service_tier_from_response(response)
+                        await proxy._settle_compact_api_key_usage(
+                            api_key=api_key,
+                            api_key_reservation=api_key_reservation,
+                            response=response,
+                            request_service_tier=request_service_tier,
+                        )
+                        log_status = "success"
+                        return response
+                    except OpenAIPlatformError as exc:
+                        upstream_request_id = exc.upstream_request_id
+                        await proxy._record_platform_auth_failure(current_identity.id, exc)
+                        if exc.status_code in {401, 403}:
+                            excluded_identity_ids.add(current_identity.id)
+                            replacement_identity = await proxy.select_platform_identity(
+                                route_family,
+                                sticky_key=platform_sticky_key,
+                                sticky_kind=platform_sticky_kind,
+                                reallocate_sticky=platform_reallocate_sticky,
+                                sticky_max_age_seconds=platform_sticky_max_age_seconds,
+                                exclude_routing_subject_ids=excluded_identity_ids,
+                            )
+                            if replacement_identity is not None:
+                                current_identity = replacement_identity
+                                platform_api_key_suffix_value = proxy.platform_api_key_suffix(current_identity)
+                                safe_retry_budget = _compact_same_contract_retry_budget()
+                                transient_retries = 0
+                                continue
+                        if exc.status_code == 500:
+                            transient_retries += 1
+                            if (
+                                transient_retries < _max_transient_same_account_retries()
+                                and _remaining_budget_seconds(deadline) > 0
+                            ):
+                                delay = backoff_seconds(transient_retries)
+                                logger.info(
+                                    "Transient compact error, retrying same platform identity "
+                                    "request_id=%s routing_subject_id=%s retry=%s/%s delay=%.2fs",
+                                    request_id,
+                                    current_identity.id,
+                                    transient_retries,
+                                    _max_transient_same_account_retries(),
+                                    delay,
+                                )
+                                await asyncio.sleep(delay)
+                                continue
+                        if exc.status_code in {502, 503, 504} and safe_retry_budget > 0:
+                            safe_retry_budget -= 1
+                            continue
+                        await proxy._settle_compact_api_key_usage(
+                            api_key=api_key,
+                            api_key_reservation=api_key_reservation,
+                            response=None,
+                            request_service_tier=request_service_tier,
+                        )
+                        raise ProxyResponseError(
+                            exc.status_code,
+                            cast(Any, exc.payload),
+                            upstream_request_id=exc.upstream_request_id,
+                            provider_kind=OPENAI_PLATFORM_PROVIDER_KIND,
+                            routing_subject_id=current_identity.id,
+                        ) from exc
 
             last_exc: ProxyResponseError | None = None
             excluded_account_ids: set[str] = set()
@@ -916,6 +1101,11 @@ class _CompactMixin:
             )
             log_error_message = log_error_message or (error.message if error else None)
             raise
+        except NotImplementedError as exc:
+            log_error_code = "not_implemented"
+            log_error_message = str(exc) or "responses/compact is not implemented"
+            log_rejection_reason = "provider_compact_not_implemented"
+            raise
         except UpstreamProxyRouteError as exc:
             route_fail_closed_reason = exc.reason
             log_error_code = "upstream_proxy_unavailable"
@@ -933,8 +1123,21 @@ class _CompactMixin:
         finally:
             usage = response.usage if response else None
             reasoning_effort = payload.reasoning.effort if payload.reasoning else None
+            input_tokens = usage.input_tokens if usage else None
+            cached_input_tokens = (
+                usage.input_tokens_details.cached_tokens if usage and usage.input_tokens_details else None
+            )
+            if log_status == "success" and provider_kind_value == OPENAI_PLATFORM_PROVIDER_KIND:
+                await proxy.record_platform_cache_observation(
+                    api_key_suffix=platform_api_key_suffix_value,
+                    client_version=None,
+                    input_tokens=input_tokens,
+                    cached_input_tokens=cached_input_tokens,
+                )
             await proxy._write_request_log(
                 account_id=account_id_value,
+                provider_kind=provider_kind_value,
+                routing_subject_id=routing_subject_id_value,
                 api_key=api_key,
                 request_id=request_id,
                 model=payload.model,
@@ -942,11 +1145,9 @@ class _CompactMixin:
                 status=log_status,
                 error_code=log_error_code,
                 error_message=log_error_message,
-                input_tokens=usage.input_tokens if usage else None,
+                input_tokens=input_tokens,
                 output_tokens=usage.output_tokens if usage else None,
-                cached_input_tokens=(
-                    usage.input_tokens_details.cached_tokens if usage and usage.input_tokens_details else None
-                ),
+                cached_input_tokens=cached_input_tokens,
                 reasoning_tokens=(
                     usage.output_tokens_details.reasoning_tokens if usage and usage.output_tokens_details else None
                 ),
@@ -966,6 +1167,9 @@ class _CompactMixin:
                 upstream_proxy_endpoint_id=route_endpoint_id,
                 upstream_proxy_fallback_used=route_fallback_used if route_endpoint_id else None,
                 upstream_proxy_fail_closed_reason=route_fail_closed_reason,
+                route_class=route_class,
+                upstream_request_id=upstream_request_id,
+                rejection_reason=log_rejection_reason,
                 useragent=useragent,
                 useragent_group=useragent_group,
             )

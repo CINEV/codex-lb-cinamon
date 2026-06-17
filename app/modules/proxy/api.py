@@ -2467,22 +2467,21 @@ async def _stream_responses(
             startup_error,
             headers=rate_limit_headers,
         )
-    stream = _normalize_public_responses_stream(
-        _stream_response_error_events(
-            stream,
-            owns_reservation=owns_reservation,
-            reservation=reservation,
-        ),
-        enforce_openai_sdk_contract=enforce_openai_sdk_contract,
+    stream = _stream_response_error_events(
+        stream,
+        owns_reservation=owns_reservation,
+        reservation=reservation,
     )
-    keepalive_frame = CODEX_KEEPALIVE_FRAME if not enforce_openai_sdk_contract else SSE_KEEPALIVE_FRAME
-    if not enforce_openai_sdk_contract:
-        stream = _prepend_initial_sse_heartbeat(
+    hard_backend_affinity_header = (
+        not enforce_openai_sdk_contract
+        and _platform_session_header_continuity_hint(BACKEND_CODEX_HTTP_ROUTE_FAMILY, effective_headers) is not None
+    )
+    if enforce_openai_sdk_contract or not hard_backend_affinity_header:
+        stream = _normalize_public_responses_stream(
             stream,
-            keepalive_frame,
-            request_id=get_request_id(),
-            route_family="responses",
+            enforce_openai_sdk_contract=enforce_openai_sdk_contract,
         )
+    keepalive_frame = CODEX_KEEPALIVE_FRAME if not enforce_openai_sdk_contract else SSE_KEEPALIVE_FRAME
     return StreamingResponse(
         inject_sse_keepalives(
             stream,
@@ -3678,6 +3677,27 @@ async def _maybe_handle_platform_responses(
             model=effective_model,
             failure=selection.failure,
         )
+    if (
+        not selection.is_platform
+        and route_family == BACKEND_CODEX_HTTP_ROUTE_FAMILY
+        and bool(getattr(proxy_service_module.get_settings(), "platform_fallback_force_enabled", False))
+    ):
+        scoped_account_ids = (
+            api_key.assigned_account_ids if api_key is not None and api_key.account_assignment_scope_enabled else None
+        )
+        identity = await context.service.select_platform_identity(route_family)
+        if identity is not None and await context.service.has_chatgpt_candidates(
+            effective_model,
+            account_ids=scoped_account_ids,
+        ):
+            selection = proxy_service_module.ProviderSelectionResult(
+                selected=proxy_service_module.SelectedPlatformSubject(
+                    provider_kind=OPENAI_PLATFORM_PROVIDER_KIND,
+                    route_class=route_class,
+                    routing_subject_id=identity.id,
+                    identity=identity,
+                )
+            )
     if not selection.is_platform:
         return None
     selected = cast(proxy_service_module.SelectedPlatformSubject, selection.selected)

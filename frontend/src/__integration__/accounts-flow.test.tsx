@@ -82,7 +82,7 @@ describe("accounts flow integration", () => {
     });
 
     await user.click(screen.getAllByRole("button", { name: /Platform Initial/ })[0]);
-    await user.click(await screen.findByRole("button", { name: /Edit/i }));
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
 
     const dialog = await screen.findByRole("dialog", { name: "Edit OpenAI Platform API key" });
     await user.clear(within(dialog).getByLabelText("Label"));

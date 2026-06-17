@@ -21,7 +21,6 @@ import {
   type AccountSortMode,
 } from "@/features/accounts/sorting";
 import { useAccountQuotaDisplayStore } from "@/hooks/use-account-quota-display";
-import { buildDuplicateAccountIdSet } from "@/utils/account-identifiers";
 import { formatSlug } from "@/utils/formatters";
 
 const STATUS_FILTER_OPTIONS = ["all", "active", "paused", "rate_limited", "quota_exceeded", "reauth_required", "deactivated"];
@@ -84,7 +83,6 @@ export function AccountList({
       );
     });
   }, [accounts, quotaDisplay, search, statusFilter, activeSortMode]);
-  const duplicateAccountIds = useMemo(() => buildDuplicateAccountIdSet(accounts), [accounts]);
 
   return (
     <div className="space-y-3">
@@ -194,7 +192,7 @@ export function AccountList({
               key={account.accountId}
               account={account}
               selected={account.accountId === selectedAccountId}
-              showAccountId={account.isEmailDuplicate === true || duplicateAccountIds.has(account.accountId)}
+              showAccountId={account.isEmailDuplicate === true}
               onSelect={onSelect}
             />
           ))

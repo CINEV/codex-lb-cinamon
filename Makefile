@@ -85,13 +85,13 @@ migration-check:
 	TMP_DB="$$(mktemp -u /tmp/codex-lb-ci-migrate-XXXXXX.db)"; \
 	DB_URL="sqlite+aiosqlite:///$${TMP_DB}"; \
 	trap 'rm -f "$${TMP_DB}"' EXIT; \
-	uv run codex-lb-db --db-url "$${DB_URL}" upgrade head; \
-	uv run codex-lb-db --db-url "$${DB_URL}" check
+	uv run codex-lb-cinamon-db --db-url "$${DB_URL}" upgrade head; \
+	uv run codex-lb-cinamon-db --db-url "$${DB_URL}" check
 
 migration-check-postgres:
 	uv sync --dev --frozen
-	uv run codex-lb-db --db-url "$(POSTGRES_TEST_DATABASE_URL)" upgrade head
-	uv run codex-lb-db --db-url "$(POSTGRES_TEST_DATABASE_URL)" check
+	uv run codex-lb-cinamon-db --db-url "$(POSTGRES_TEST_DATABASE_URL)" upgrade head
+	uv run codex-lb-cinamon-db --db-url "$(POSTGRES_TEST_DATABASE_URL)" check
 
 .PHONY: package
 package: frontend-build

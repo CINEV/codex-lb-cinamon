@@ -50,12 +50,34 @@ from app.modules.proxy.helpers import (
     _upstream_error_from_openai,
 )
 from app.modules.proxy.load_balancer import AccountLease
+from app.modules.upstream_identities.types import CHATGPT_WEB_PROVIDER_KIND
 
 _REQUEST_TRANSPORT_HTTP = "http"
 
 
 def _facade() -> Any:
     return sys.modules["app.modules.proxy.service"]
+
+
+async def _sticky_chatgpt_preferred_account_id(
+    proxy: _StreamingServiceProtocol,
+    *,
+    sticky_key: str | None,
+    sticky_kind: StickySessionKind | None,
+    sticky_max_age_seconds: int | None,
+) -> str | None:
+    if sticky_key is None or sticky_kind != StickySessionKind.CODEX_SESSION:
+        return None
+    async with proxy._repo_factory() as repos:
+        sticky_target = await repos.sticky_sessions.get_target(
+            sticky_key,
+            kind=sticky_kind,
+            provider_kind=CHATGPT_WEB_PROVIDER_KIND,
+            max_age_seconds=sticky_max_age_seconds,
+        )
+    if sticky_target is None:
+        return None
+    return sticky_target.account_id
 
 
 class _StreamingRetryMixin:
@@ -202,6 +224,15 @@ class _StreamingRetryMixin:
                         )
                         return
             file_required_preferred_account = False
+            if preferred_account_id is None:
+                preferred_account_id = await _sticky_chatgpt_preferred_account_id(
+                    proxy,
+                    sticky_key=affinity.key,
+                    sticky_kind=affinity.kind,
+                    sticky_max_age_seconds=affinity.max_age_seconds,
+                )
+                if preferred_account_id is not None:
+                    file_required_preferred_account = True
             if preferred_account_id is None:
                 # ``input_file.file_id`` references must land on the account
                 # that registered the upload; otherwise upstream rejects the
