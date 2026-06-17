@@ -21,7 +21,7 @@ def test_ci_uses_1_32_minimum_and_1_35_baseline() -> None:
     makefile = Path("Makefile").read_text(encoding="utf-8")
     workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert "make helm-check" in workflow
-    assert "make helm-smoke-kind" in workflow
+    assert "HELM_SMOKE_BUILD_IMAGE=false helm-smoke-kind" in workflow
     assert "set -e -o pipefail" in makefile
     assert "for version in 1.32.0 1.35.0" in makefile
     assert '-kubernetes-version "$${version}"' in makefile
