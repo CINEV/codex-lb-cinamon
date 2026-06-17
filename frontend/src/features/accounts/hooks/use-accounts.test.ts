@@ -45,16 +45,52 @@ describe("useAccounts", () => {
       accountId: platformIdentity.accountId,
       payload: { label: "Platform Key Renamed" },
     });
+    await result.current.probeMutation.mutateAsync({
+      accountId: firstAccountId as string,
+    });
+    const routingPolicyResult = await result.current.routingPolicyMutation.mutateAsync({
+      accountId: firstAccountId as string,
+      routingPolicy: "preserve",
+    });
+    expect(routingPolicyResult.routingPolicy).toBe("preserve");
 
     const imported = await result.current.importMutation.mutateAsync(
       new File(["{}"], "auth.json", { type: "application/json" }),
     );
-    await result.current.deleteMutation.mutateAsync(imported.accountId);
+    await result.current.deleteMutation.mutateAsync({
+      accountId: imported.accountId,
+      deleteHistory: false,
+    });
 
     await waitFor(() => {
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["accounts", "list"] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["accounts", "trends"] });
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: ["accounts", "trends", firstAccountId],
+      });
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["dashboard", "overview"] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["dashboard", "projections"] });
     });
+  });
+
+  it("exports auth for an account without invalidating account queries", async () => {
+    const queryClient = createTestQueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+
+    const { result } = renderHook(() => useAccounts(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => expect(result.current.accountsQuery.isSuccess).toBe(true));
+    const firstAccountId = result.current.accountsQuery.data?.[0]?.accountId;
+    expect(firstAccountId).toBeTruthy();
+
+    await result.current.exportAuthMutation.mutateAsync(firstAccountId as string);
+
+    expect(invalidateSpy).not.toHaveBeenCalledWith({ queryKey: ["accounts", "list"] });
+    expect(invalidateSpy).not.toHaveBeenCalledWith({ queryKey: ["accounts", "trends"] });
+    expect(invalidateSpy).not.toHaveBeenCalledWith({ queryKey: ["dashboard", "overview"] });
+    expect(invalidateSpy).not.toHaveBeenCalledWith({ queryKey: ["dashboard", "projections"] });
   });
 
   it("surfaces platform identity conflict errors", async () => {

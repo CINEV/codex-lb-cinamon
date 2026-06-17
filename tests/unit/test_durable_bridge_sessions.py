@@ -148,6 +148,104 @@ async def test_durable_bridge_claim_renews_same_owner_epoch(
 
 
 @pytest.mark.asyncio
+async def test_durable_bridge_account_change_advances_epoch_to_fence_stale_release(
+    coordinator: DurableBridgeSessionCoordinator,
+) -> None:
+    claimed = await coordinator.claim_live_session(
+        session_key_kind="session_header",
+        session_key_value="sid-account-change",
+        api_key_id=None,
+        instance_id="instance-a",
+        lease_ttl_seconds=60.0,
+        account_id="acc-1",
+        model="gpt-5.4",
+        service_tier=None,
+        latest_turn_state="http_turn_1",
+        latest_response_id="resp_1",
+        allow_takeover=True,
+    )
+
+    replaced = await coordinator.claim_live_session(
+        session_key_kind="session_header",
+        session_key_value="sid-account-change",
+        api_key_id=None,
+        instance_id="instance-a",
+        lease_ttl_seconds=60.0,
+        account_id="acc-2",
+        model="gpt-5.4",
+        service_tier=None,
+        latest_turn_state="http_turn_2",
+        latest_response_id="resp_2",
+        allow_takeover=False,
+    )
+
+    stale_release = await coordinator.release_live_session(
+        session_id=claimed.session_id,
+        instance_id="instance-a",
+        owner_epoch=claimed.owner_epoch,
+        draining=False,
+    )
+
+    assert replaced.session_id == claimed.session_id
+    assert replaced.owner_instance_id == "instance-a"
+    assert replaced.owner_epoch == claimed.owner_epoch + 1
+    assert replaced.account_id == "acc-2"
+    assert stale_release is not None
+    assert stale_release.owner_instance_id == "instance-a"
+    assert stale_release.owner_epoch == replaced.owner_epoch
+    assert stale_release.state == "active"
+
+
+@pytest.mark.asyncio
+async def test_durable_bridge_forced_generation_advance_fences_same_account_stale_release(
+    coordinator: DurableBridgeSessionCoordinator,
+) -> None:
+    claimed = await coordinator.claim_live_session(
+        session_key_kind="session_header",
+        session_key_value="sid-forced-generation",
+        api_key_id=None,
+        instance_id="instance-a",
+        lease_ttl_seconds=60.0,
+        account_id="acc-1",
+        model="gpt-5.4",
+        service_tier=None,
+        latest_turn_state="http_turn_1",
+        latest_response_id="resp_1",
+        allow_takeover=True,
+    )
+
+    replaced = await coordinator.claim_live_session(
+        session_key_kind="session_header",
+        session_key_value="sid-forced-generation",
+        api_key_id=None,
+        instance_id="instance-a",
+        lease_ttl_seconds=60.0,
+        account_id="acc-1",
+        model="gpt-5.4",
+        service_tier=None,
+        latest_turn_state="http_turn_2",
+        latest_response_id="resp_2",
+        allow_takeover=True,
+        force_owner_epoch_advance=True,
+    )
+
+    stale_release = await coordinator.release_live_session(
+        session_id=claimed.session_id,
+        instance_id="instance-a",
+        owner_epoch=claimed.owner_epoch,
+        draining=False,
+    )
+
+    assert replaced.session_id == claimed.session_id
+    assert replaced.owner_instance_id == "instance-a"
+    assert replaced.owner_epoch == claimed.owner_epoch + 1
+    assert stale_release is not None
+    assert stale_release.owner_instance_id == "instance-a"
+    assert stale_release.owner_epoch == replaced.owner_epoch
+    assert stale_release.state == "active"
+
+
+@pytest.mark.asyncio
 async def test_durable_bridge_claim_takes_over_after_release(
     coordinator: DurableBridgeSessionCoordinator,
 ) -> None:
@@ -322,6 +420,50 @@ async def test_durable_bridge_takeover_preserves_existing_anchor_when_replacemen
     assert reclaimed.owner_instance_id == "instance-b"
     assert reclaimed.latest_turn_state == "http_turn_old"
     assert reclaimed.latest_response_id == "resp_old"
+
+
+@pytest.mark.asyncio
+async def test_durable_bridge_previous_response_records_completed_input_prefix(
+    coordinator: DurableBridgeSessionCoordinator,
+) -> None:
+    claimed = await coordinator.claim_live_session(
+        session_key_kind="session_header",
+        session_key_value="sid-prefix",
+        api_key_id="key-1",
+        instance_id="instance-a",
+        lease_ttl_seconds=60.0,
+        account_id="acc-1",
+        model="gpt-5.4",
+        service_tier=None,
+        latest_turn_state="http_turn_prefix",
+        latest_response_id=None,
+        allow_takeover=True,
+    )
+
+    await coordinator.register_previous_response_id(
+        session_id=claimed.session_id,
+        api_key_id="key-1",
+        instance_id="instance-a",
+        owner_epoch=claimed.owner_epoch,
+        response_id="resp_prefix",
+        lease_ttl_seconds=60.0,
+        input_item_count=3,
+        input_full_fingerprint="a" * 64,
+    )
+
+    lookup = await coordinator.lookup_request_targets(
+        session_key_kind="session_header",
+        session_key_value="sid-prefix",
+        api_key_id="key-1",
+        turn_state=None,
+        session_header="sid-prefix",
+        previous_response_id=None,
+    )
+
+    assert lookup is not None
+    assert lookup.latest_response_id == "resp_prefix"
+    assert lookup.latest_input_item_count == 3
+    assert lookup.latest_input_full_fingerprint == "a" * 64
 
 
 @pytest.mark.asyncio

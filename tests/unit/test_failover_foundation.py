@@ -6,6 +6,7 @@ from app.core.balancer.logic import (
     HEALTH_TIER_DRAINING,
     HEALTH_TIER_HEALTHY,
     HEALTH_TIER_PROBING,
+    ROUTING_POLICY_BURN_FIRST,
     AccountState,
     evaluate_health_tier,
     failover_decision,
@@ -89,6 +90,21 @@ class TestClassifyUpstreamFailure:
             error=UpstreamError(message=""),
             http_status=502,
             phase="connect",
+        )
+        assert result["failure_class"] == "retryable_transient"
+
+    def test_overloaded_error(self) -> None:
+        # Regression for #565: upstream "Our servers are currently overloaded.
+        # Please try again later" is delivered with code=overloaded_error and
+        # may surface without a 5xx status (e.g. on streamed responses where
+        # the HTTP status was already 200 before the error envelope).
+        # Classifying it as non_retryable made the agent stop mid-task instead
+        # of failing over to another account or surfacing a retryable error.
+        result = classify_upstream_failure(
+            error_code="overloaded_error",
+            error=UpstreamError(message="Our servers are currently overloaded. Please try again later"),
+            http_status=None,
+            phase="first_event",
         )
         assert result["failure_class"] == "retryable_transient"
 
@@ -303,6 +319,21 @@ class TestSelectAccountHealthTier:
         result = select_account(states, routing_strategy="usage_weighted")
         assert result.account is not None
         assert result.account.account_id == "b"
+
+    def test_prefers_healthy_normal_over_draining_burn_first(self) -> None:
+        states = [
+            AccountState(
+                "drain",
+                AccountStatus.ACTIVE,
+                used_percent=10.0,
+                health_tier=HEALTH_TIER_DRAINING,
+                routing_policy=ROUTING_POLICY_BURN_FIRST,
+            ),
+            AccountState("healthy", AccountStatus.ACTIVE, used_percent=80.0, health_tier=HEALTH_TIER_HEALTHY),
+        ]
+        result = select_account(states, routing_strategy="fill_first")
+        assert result.account is not None
+        assert result.account.account_id == "healthy"
 
     def test_prefers_healthy_over_probing(self) -> None:
         states = [

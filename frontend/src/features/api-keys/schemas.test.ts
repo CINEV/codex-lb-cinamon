@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ApiKeyCreateRequestSchema,
   ApiKeyCreateResponseSchema,
   ApiKeySchema,
   ApiKeyUpdateRequestSchema,
@@ -16,6 +17,7 @@ describe("ApiKeySchema", () => {
       name: "Service Key",
       keyPrefix: "sk-live",
       allowedModels: ["gpt-4.1"],
+      applyToCodexModel: true,
       expiresAt: null,
       isActive: true,
       createdAt: ISO,
@@ -35,8 +37,10 @@ describe("ApiKeySchema", () => {
 
     expect(parsed.id).toBe("key-1");
     expect(parsed.allowedModels).toEqual(["gpt-4.1"]);
+    expect(parsed.applyToCodexModel).toBe(true);
     expect(parsed.limits).toHaveLength(1);
     expect(parsed.limits[0].limitType).toBe("total_tokens");
+    expect(parsed.trafficClass).toBe("foreground");
   });
 
   it("defaults limits to empty array when not provided", () => {
@@ -52,6 +56,30 @@ describe("ApiKeySchema", () => {
     });
 
     expect(parsed.limits).toEqual([]);
+    expect(parsed.applyToCodexModel).toBe(false);
+    expect(parsed.pooledRemainingPercentPrimary).toBeNull();
+    expect(parsed.pooledRemainingPercentSecondary).toBeNull();
+    expect(parsed.pooledCapacityCreditsPrimary).toBe(0);
+  });
+
+  it("parses pooled credit fields", () => {
+    const parsed = ApiKeySchema.parse({
+      id: "key-1",
+      name: "Service Key",
+      keyPrefix: "sk-live",
+      allowedModels: null,
+      expiresAt: null,
+      isActive: true,
+      createdAt: ISO,
+      lastUsedAt: null,
+      pooledRemainingPercentPrimary: 67.5,
+      pooledRemainingPercentSecondary: 85.0,
+      pooledCapacityCreditsPrimary: 225.0,
+    });
+
+    expect(parsed.pooledRemainingPercentPrimary).toBe(67.5);
+    expect(parsed.pooledRemainingPercentSecondary).toBe(85.0);
+    expect(parsed.pooledCapacityCreditsPrimary).toBe(225.0);
   });
 });
 
@@ -74,17 +102,48 @@ describe("ApiKeyCreateResponseSchema", () => {
   });
 });
 
+describe("ApiKeyCreateRequestSchema", () => {
+  it("accepts optional assigned accounts", () => {
+    const parsed = ApiKeyCreateRequestSchema.parse({
+      name: "Scoped Key",
+      assignedAccountIds: ["acc_primary"],
+    });
+
+    expect(parsed.assignedAccountIds).toEqual(["acc_primary"]);
+  });
+
+  it("accepts opportunistic traffic class in create payload", () => {
+    const parsed = ApiKeyCreateRequestSchema.parse({
+      name: "Opportunistic Key",
+      trafficClass: "opportunistic",
+    });
+
+    expect(parsed.trafficClass).toBe("opportunistic");
+  });
+
+  it("rejects invalid traffic class in create payload", () => {
+    const result = ApiKeyCreateRequestSchema.safeParse({
+      name: "Bad Key",
+      trafficClass: "bulk",
+    });
+
+    expect(result.success).toBe(false);
+  });
+});
+
 describe("ApiKeyUpdateRequestSchema", () => {
   it("accepts partial update payload", () => {
     const parsed = ApiKeyUpdateRequestSchema.parse({
       name: "Updated Key",
       allowedModels: ["gpt-4.1-mini"],
+      applyToCodexModel: true,
       weeklyTokenLimit: 50000,
       expiresAt: ISO,
       isActive: false,
     });
 
     expect(parsed.name).toBe("Updated Key");
+    expect(parsed.applyToCodexModel).toBe(true);
     expect(parsed.isActive).toBe(false);
   });
 
@@ -113,6 +172,14 @@ describe("ApiKeyUpdateRequestSchema", () => {
     });
 
     expect(parsed.resetUsage).toBe(true);
+  });
+
+  it("accepts opportunistic traffic class in update payload", () => {
+    const parsed = ApiKeyUpdateRequestSchema.parse({
+      trafficClass: "opportunistic",
+    });
+
+    expect(parsed.trafficClass).toBe("opportunistic");
   });
 });
 

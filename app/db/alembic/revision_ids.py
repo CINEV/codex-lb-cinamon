@@ -28,6 +28,7 @@ OLD_TO_NEW_REVISION_MAP: dict[str, str] = {
     "20260410_020000_restore_import_without_overwrite_default_false": (
         "20260408_010000_merge_import_without_overwrite_and_assignment_heads"
     ),
+    "20260525_000000_merge_routing_settings_security_heads": "20260513_000000_add_accounts_alias",
 }
 
 NEW_TO_OLD_REVISION_MAP: dict[str, str] = {new: old for old, new in OLD_TO_NEW_REVISION_MAP.items()}

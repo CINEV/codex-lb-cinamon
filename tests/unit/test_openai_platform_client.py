@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -16,7 +17,7 @@ class _FakeContent:
     def __init__(self, chunks: list[bytes]) -> None:
         self._chunks = chunks
 
-    async def iter_chunked(self, size: int):
+    async def iter_chunked(self, size: int) -> AsyncIterator[bytes]:
         del size
         for chunk in self._chunks:
             yield chunk
@@ -127,7 +128,7 @@ async def test_iter_sse_event_blocks_reassembles_fragmented_events() -> None:
         ]
     )
 
-    events = [event async for event in _iter_sse_event_blocks(response)]
+    events = [event async for event in _iter_sse_event_blocks(cast(Any, response))]
 
     assert events == [
         'event: response.output_text.delta\ndata: {"type":"response.output_text.delta"}\n\n',

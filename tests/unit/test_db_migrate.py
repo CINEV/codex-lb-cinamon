@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import importlib
 import json
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
 import pytest
+import sqlalchemy as sa
 from alembic import command
 from alembic.util.exc import CommandError
 from sqlalchemy import create_engine, inspect, text
@@ -199,6 +202,118 @@ def test_schema_migration_contract_matches_after_upgrade(tmp_path: Path) -> None
     assert check_schema_drift(url) == ()
 
 
+def test_reauth_required_status_migration_downgrade_remaps_rows(tmp_path: Path) -> None:
+    db_path = tmp_path / "reauth-status.db"
+    url = _db_url(db_path)
+    parent_revision = "20260602_080000_merge_upstream_proxy_and_quota_planner_heads"
+    reauth_revision = "20260604_000000_add_reauth_required_account_status"
+
+    run_upgrade(url, parent_revision, bootstrap_legacy=False)
+    engine = create_engine(to_sync_database_url(url))
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO accounts "
+                    "(id, email, plan_type, access_token_encrypted, refresh_token_encrypted, "
+                    "id_token_encrypted, last_refresh, status, deactivation_reason) "
+                    "VALUES (:id, :email, :plan_type, :access_token, :refresh_token, "
+                    ":id_token, :last_refresh, :status, :deactivation_reason)"
+                ),
+                [
+                    {
+                        "id": "acc_reauth_downgrade",
+                        "email": "reauth-downgrade@example.com",
+                        "plan_type": "plus",
+                        "access_token": b"access",
+                        "refresh_token": b"refresh",
+                        "id_token": b"id",
+                        "last_refresh": "2026-06-04 00:00:00",
+                        "status": "deactivated",
+                        "deactivation_reason": "Authentication token invalidated - re-login required",
+                    },
+                    {
+                        "id": "acc_usage_reauth_downgrade",
+                        "email": "usage-reauth-downgrade@example.com",
+                        "plan_type": "plus",
+                        "access_token": b"access",
+                        "refresh_token": b"refresh",
+                        "id_token": b"id",
+                        "last_refresh": "2026-06-04 00:00:00",
+                        "status": "deactivated",
+                        "deactivation_reason": (
+                            "Usage API error: HTTP 401 - Your authentication token has been invalidated. "
+                            "Please try signing in again."
+                        ),
+                    },
+                    {
+                        "id": "acc_disabled_downgrade",
+                        "email": "disabled-downgrade@example.com",
+                        "plan_type": "plus",
+                        "access_token": b"access",
+                        "refresh_token": b"refresh",
+                        "id_token": b"id",
+                        "last_refresh": "2026-06-04 00:00:00",
+                        "status": "deactivated",
+                        "deactivation_reason": "Usage API error: HTTP 401 - Account has been deactivated",
+                    },
+                ],
+            )
+    finally:
+        engine.dispose()
+
+    run_upgrade(url, reauth_revision, bootstrap_legacy=False)
+
+    engine = create_engine(to_sync_database_url(url))
+    try:
+        with engine.connect() as connection:
+            status_rows = connection.execute(
+                text("SELECT id, status FROM accounts WHERE id IN (:exact_id, :usage_id, :disabled_id) ORDER BY id"),
+                {
+                    "exact_id": "acc_reauth_downgrade",
+                    "usage_id": "acc_usage_reauth_downgrade",
+                    "disabled_id": "acc_disabled_downgrade",
+                },
+            )
+            statuses = {str(row[0]): str(row[1]) for row in status_rows}
+            status_column = next(
+                column for column in inspect(connection).get_columns("accounts") if column["name"] == "status"
+            )
+
+        assert statuses == {
+            "acc_disabled_downgrade": "deactivated",
+            "acc_reauth_downgrade": "reauth_required",
+            "acc_usage_reauth_downgrade": "reauth_required",
+        }
+        assert str(status_column["type"]).upper() == "VARCHAR(15)"
+
+        command.downgrade(_build_alembic_config(url), parent_revision)
+
+        with engine.connect() as connection:
+            status_rows = connection.execute(
+                text("SELECT id, status FROM accounts WHERE id IN (:exact_id, :usage_id, :disabled_id) ORDER BY id"),
+                {
+                    "exact_id": "acc_reauth_downgrade",
+                    "usage_id": "acc_usage_reauth_downgrade",
+                    "disabled_id": "acc_disabled_downgrade",
+                },
+            )
+            statuses = {str(row[0]): str(row[1]) for row in status_rows}
+            status_column = next(
+                column for column in inspect(connection).get_columns("accounts") if column["name"] == "status"
+            )
+    finally:
+        engine.dispose()
+
+    assert statuses == {
+        "acc_disabled_downgrade": "deactivated",
+        "acc_reauth_downgrade": "deactivated",
+        "acc_usage_reauth_downgrade": "deactivated",
+    }
+    assert str(status_column["type"]).upper() == "VARCHAR(14)"
+    assert inspect_migration_state(url).current_revision == parent_revision
+
+
 def test_base_revision_does_not_depend_on_live_metadata(tmp_path: Path, monkeypatch) -> None:
     db_path = tmp_path / "base.db"
     url = _db_url(db_path)
@@ -276,6 +391,54 @@ def test_request_logs_response_lookup_downgrade_preserves_session_id_column(tmp_
     assert "session_id" in columns
 
 
+def test_quota_planner_migration_repairs_preexisting_request_kind_column(tmp_path: Path) -> None:
+    db_path = tmp_path / "quota-planner-request-kind-drift.db"
+    url = _db_url(db_path)
+    pre_revision = "20260520_000000_merge_api_key_and_http_bridge_heads"
+    target_revision = "20260520_030000_add_quota_planner"
+
+    run_upgrade(url, pre_revision, bootstrap_legacy=False)
+
+    sync_url = to_sync_database_url(url)
+    with create_engine(sync_url, future=True).begin() as connection:
+        connection.execute(text("ALTER TABLE request_logs ADD COLUMN source VARCHAR"))
+        connection.execute(text("ALTER TABLE request_logs ADD COLUMN request_kind VARCHAR"))
+        connection.execute(
+            text(
+                """
+                INSERT INTO request_logs (
+                    id,
+                    request_id,
+                    model,
+                    status,
+                    source,
+                    request_kind
+                ) VALUES
+                    (1, 'normal-null', 'gpt-5.4-mini', 'success', NULL, NULL),
+                    (2, 'normal-empty', 'gpt-5.4-mini', 'success', NULL, ''),
+                    (3, 'warmup-null', 'gpt-5.4-mini', 'success', 'limit_warmup', NULL)
+                """
+            )
+        )
+
+    result = run_upgrade(url, target_revision, bootstrap_legacy=False)
+    assert result.current_revision == target_revision
+
+    with create_engine(sync_url, future=True).connect() as connection:
+        rows = connection.execute(text("SELECT request_id, request_kind FROM request_logs ORDER BY id")).fetchall()
+        request_kind_column = next(
+            column for column in inspect(connection).get_columns("request_logs") if column["name"] == "request_kind"
+        )
+
+    assert rows == [
+        ("normal-null", "normal"),
+        ("normal-empty", "normal"),
+        ("warmup-null", "warmup"),
+    ]
+    assert request_kind_column["nullable"] is False
+    assert request_kind_column["default"] is not None
+
+
 def test_check_schema_drift_detects_rogue_table(tmp_path: Path) -> None:
     db_path = tmp_path / "drift.db"
     url = _db_url(db_path)
@@ -293,6 +456,60 @@ def test_check_schema_drift_detects_rogue_table(tmp_path: Path) -> None:
     assert any("rogue_table" in diff for diff in drift)
 
 
+def test_check_schema_drift_ignores_legacy_live_extra_request_log_column(tmp_path: Path) -> None:
+    db_path = tmp_path / "legacy-extra-column.db"
+    url = _db_url(db_path)
+
+    run_upgrade(url, "head", bootstrap_legacy=False)
+
+    sync_url = to_sync_database_url(url)
+    with create_engine(sync_url, future=True).connect() as connection:
+        connection.execute(text("ALTER TABLE request_logs ADD COLUMN slim_summary_json TEXT"))
+        connection.commit()
+
+    assert check_schema_drift(url) == ()
+
+
+def test_check_schema_drift_ignores_sqlite_real_float_reflection_for_sticky_thresholds(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "sqlite-real-float.db"
+    url = _db_url(db_path)
+
+    run_upgrade(url, "head", bootstrap_legacy=False)
+
+    def _compare_metadata(context, metadata):
+        return [
+            [
+                (
+                    "modify_type",
+                    None,
+                    "dashboard_settings",
+                    "sticky_reallocation_primary_budget_threshold_pct",
+                    {},
+                    sa.REAL(),
+                    sa.Float(),
+                )
+            ],
+            [
+                (
+                    "modify_type",
+                    None,
+                    "dashboard_settings",
+                    "sticky_reallocation_secondary_budget_threshold_pct",
+                    {},
+                    sa.REAL(),
+                    sa.Float(),
+                )
+            ],
+        ]
+
+    monkeypatch.setattr(migrate_module, "compare_metadata", _compare_metadata)
+
+    assert check_schema_drift(url) == ()
+
+
 def test_check_schema_drift_detects_missing_manual_performance_index(tmp_path: Path) -> None:
     db_path = tmp_path / "missing-index.db"
     url = _db_url(db_path)
@@ -302,10 +519,40 @@ def test_check_schema_drift_detects_missing_manual_performance_index(tmp_path: P
     sync_url = to_sync_database_url(url)
     with create_engine(sync_url, future=True).connect() as connection:
         connection.execute(text("DROP INDEX idx_usage_window_account_latest"))
+        connection.execute(text("DROP INDEX idx_usage_window_raw_account_latest"))
         connection.commit()
 
     drift = check_schema_drift(url)
     assert any("idx_usage_window_account_latest" in diff for diff in drift)
+    assert any("idx_usage_window_raw_account_latest" in diff for diff in drift)
+
+
+def test_raw_usage_window_latest_index_migration_is_idempotent(tmp_path: Path) -> None:
+    db_path = tmp_path / "raw-window-latest-index.db"
+    url = _db_url(db_path)
+    pre_revision = "20260513_000000_add_accounts_alias"
+    target_revision = "20260525_000000_add_usage_raw_window_latest_index"
+
+    run_upgrade(url, pre_revision, bootstrap_legacy=False)
+
+    sync_url = to_sync_database_url(url)
+    with create_engine(sync_url, future=True).connect() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE INDEX idx_usage_window_raw_account_latest
+                ON usage_history ("window", account_id, recorded_at DESC, id DESC)
+                """
+            )
+        )
+        connection.commit()
+
+    result = run_upgrade(url, target_revision, bootstrap_legacy=False)
+    assert result.current_revision == target_revision
+
+    with create_engine(sync_url, future=True).connect() as connection:
+        index_names = {index["name"] for index in inspect(connection).get_indexes("usage_history")}
+        assert "idx_usage_window_raw_account_latest" in index_names
 
 
 def test_check_schema_drift_detects_missing_dashboard_read_indexes(tmp_path: Path) -> None:
@@ -374,6 +621,24 @@ def test_run_upgrade_legacy_import_default_revision_still_runs_bridge_migrations
         assert inspector.has_table("http_bridge_session_aliases")
 
 
+def test_run_upgrade_auto_remaps_legacy_routing_security_merge_head(tmp_path: Path) -> None:
+    db_path = tmp_path / "routing-security-remap.db"
+    url = _db_url(db_path)
+
+    initial = run_upgrade(url, "head", bootstrap_legacy=False)
+    assert initial.current_revision is not None
+
+    sync_url = to_sync_database_url(url)
+    with create_engine(sync_url, future=True).begin() as connection:
+        connection.execute(
+            text("UPDATE alembic_version SET version_num = :legacy"),
+            {"legacy": "20260525_000000_merge_routing_settings_security_heads"},
+        )
+
+    result = run_upgrade(url, "head", bootstrap_legacy=False)
+    assert result.current_revision == initial.current_revision
+
+
 def test_run_upgrade_without_auto_remap_fails_for_legacy_revision_ids(tmp_path: Path) -> None:
     db_path = tmp_path / "no-remap.db"
     url = _db_url(db_path)
@@ -416,6 +681,8 @@ def test_run_upgrade_repairs_branched_legacy_revision_ids(tmp_path: Path) -> Non
         api_key_columns = {column["name"] for column in inspector.get_columns("api_keys")}
 
         assert "routing_strategy" in dashboard_columns
+        assert "relative_availability_power" in dashboard_columns
+        assert "relative_availability_top_k" in dashboard_columns
         assert "enforced_model" in api_key_columns
         assert "enforced_reasoning_effort" in api_key_columns
         assert inspector.has_table("api_firewall_allowlist")
@@ -657,7 +924,9 @@ def test_check_migration_policy_reports_head_and_format_violations(monkeypatch, 
 
 def test_create_sqlite_pre_migration_backup_rotates_old_files(tmp_path: Path) -> None:
     db_path = tmp_path / "store.db"
-    db_path.write_bytes(b"sqlite-bytes")
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT NOT NULL)")
+        conn.execute("INSERT INTO items (name) VALUES ('alpha')")
 
     created: list[Path] = []
     base_time = datetime(2026, 2, 13, 12, 0, 0, tzinfo=timezone.utc)
@@ -673,8 +942,47 @@ def test_create_sqlite_pre_migration_backup_rotates_old_files(tmp_path: Path) ->
     backups = list_sqlite_pre_migration_backups(db_path)
     assert len(backups) == 2
     assert backups == created[-2:]
-    assert backups[0].read_bytes() == b"sqlite-bytes"
-    assert backups[1].read_bytes() == b"sqlite-bytes"
+    for backup in backups:
+        with sqlite3.connect(backup) as conn:
+            assert conn.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+            assert conn.execute("SELECT name FROM items").fetchall() == [("alpha",)]
+        assert not Path(f"{backup}-wal").exists()
+
+
+def test_create_sqlite_pre_migration_backup_consolidates_wal_rows(tmp_path: Path) -> None:
+    db_path = tmp_path / "store.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT NOT NULL)")
+        conn.execute("INSERT INTO items (name) VALUES ('from-wal')")
+        conn.commit()
+        assert Path(f"{db_path}-wal").exists()
+
+        backup = create_sqlite_pre_migration_backup(
+            db_path,
+            max_files=2,
+            now=datetime(2026, 2, 13, 12, 0, 0, tzinfo=timezone.utc),
+        )
+
+    with sqlite3.connect(backup) as conn:
+        assert conn.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+        assert conn.execute("SELECT name FROM items").fetchall() == [("from-wal",)]
+    assert not Path(f"{backup}-wal").exists()
+
+
+def test_create_sqlite_pre_migration_backup_preserves_source_mode(tmp_path: Path) -> None:
+    db_path = tmp_path / "store.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT NOT NULL)")
+    db_path.chmod(0o600)
+
+    backup = create_sqlite_pre_migration_backup(
+        db_path,
+        max_files=2,
+        now=datetime(2026, 2, 13, 12, 0, 0, tzinfo=timezone.utc),
+    )
+
+    assert backup.stat().st_mode & 0o777 == 0o600
 
 
 class _FakeStringType:
@@ -767,3 +1075,18 @@ def test_max_revision_id_length_exceeds_alembic_default(tmp_path: Path) -> None:
     config = _build_alembic_config(_db_url(db_path))
 
     assert _max_revision_id_length(config) > 32
+
+
+def test_routing_policy_persistence_downgrade_does_not_drop_shared_columns(monkeypatch) -> None:
+    migration = importlib.import_module("app.db.alembic.versions.20260601_010000_add_routing_policy_persistence")
+
+    class _OpMustNotAlter:
+        def batch_alter_table(self, table_name: str):  # pragma: no cover - assertion helper
+            raise AssertionError(f"unexpected schema alteration for {table_name}")
+
+        def get_bind(self):  # pragma: no cover - assertion helper
+            raise AssertionError("downgrade should not inspect a bind")
+
+    monkeypatch.setattr(migration, "op", _OpMustNotAlter())
+
+    migration.downgrade()

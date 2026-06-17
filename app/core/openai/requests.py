@@ -78,6 +78,7 @@ def validate_tool_types(
     tools: list[JsonValue],
     *,
     unsupported_tool_types: frozenset[str] = RESPONSES_UNSUPPORTED_TOOL_TYPES,
+    allow_builtin_tools: bool = False,
 ) -> list[JsonValue]:
     normalized_tools: list[JsonValue] = []
     for tool in tools:
@@ -92,7 +93,7 @@ def validate_tool_types(
                 tool = dict(tool_mapping)
                 tool["type"] = normalized_type
                 tool_type = normalized_type
-            if tool_type in unsupported_tool_types:
+            if not allow_builtin_tools and tool_type in unsupported_tool_types:
                 raise ValueError(f"Unsupported tool type: {tool_type}")
         normalized_tools.append(tool)
     return normalized_tools
@@ -193,6 +194,41 @@ def extract_input_file_ids(input_value: JsonValue) -> set[str]:
     return file_ids
 
 
+def _append_input_image_file_references(
+    references: list[InputImageFileReference],
+    value: JsonValue,
+    *,
+    item_index: int,
+    content_index: int | None,
+) -> None:
+    if is_json_mapping(value):
+        file_id = _input_image_file_reference(value)
+        if file_id is not None:
+            references.append(
+                InputImageFileReference(
+                    item_index=item_index,
+                    content_index=content_index,
+                    file_id=file_id,
+                )
+            )
+        for child in value.values():
+            _append_input_image_file_references(
+                references,
+                child,
+                item_index=item_index,
+                content_index=content_index,
+            )
+        return
+    if is_json_list(value):
+        for child in value:
+            _append_input_image_file_references(
+                references,
+                child,
+                item_index=item_index,
+                content_index=content_index,
+            )
+
+
 def extract_input_image_file_references(input_value: JsonValue) -> list[InputImageFileReference]:
     if not is_json_list(input_value):
         return []
@@ -218,17 +254,19 @@ def extract_input_image_file_references(input_value: JsonValue) -> list[InputIma
         else:
             parts = []
         for content_index, part in enumerate(parts):
-            if not is_json_mapping(part):
-                continue
-            file_id = _input_image_file_reference(part)
-            if file_id is not None:
-                references.append(
-                    InputImageFileReference(
-                        item_index=item_index,
-                        content_index=content_index,
-                        file_id=file_id,
-                    )
-                )
+            _append_input_image_file_references(
+                references,
+                part,
+                item_index=item_index,
+                content_index=content_index,
+            )
+        output = item_mapping.get("output")
+        _append_input_image_file_references(
+            references,
+            output,
+            item_index=item_index,
+            content_index=None,
+        )
     return references
 
 
@@ -240,6 +278,97 @@ def _sanitize_input_items(input_items: list[JsonValue]) -> list[JsonValue]:
             continue
         sanitized_input.append(_normalize_role_input_item(sanitized_item))
     return sanitized_input
+
+
+def _normalize_responses_input_instructions(data: JsonValue) -> JsonValue:
+    if not is_json_mapping(data):
+        return data
+    input_value = data.get("input")
+    if not is_json_list(input_value):
+        return data
+
+    instruction_parts: list[str] = []
+    input_items: list[JsonValue] = []
+    changed = False
+    for item in input_value:
+        item_mapping = _json_mapping_or_none(item)
+        if item_mapping is None:
+            input_items.append(item)
+            continue
+        role = item_mapping.get("role")
+        if role not in ("system", "developer"):
+            input_items.append(item)
+            continue
+        instruction_text, preserved_content = _split_responses_instruction_item_content(item_mapping)
+        if instruction_text:
+            instruction_parts.append(instruction_text)
+        if preserved_content is not None:
+            preserved_item = dict(item_mapping)
+            preserved_item["role"] = "user"
+            preserved_item["content"] = preserved_content
+            input_items.append(preserved_item)
+        changed = True
+
+    if not changed:
+        return data
+
+    normalized: MutableJsonObject = dict(data)
+    existing_instructions = normalized.get("instructions")
+    merged_instructions = _merge_responses_instructions(
+        existing_instructions if isinstance(existing_instructions, str) else "",
+        instruction_parts,
+    )
+    normalized["instructions"] = merged_instructions
+    normalized["input"] = input_items
+    return normalized
+
+
+def _merge_responses_instructions(existing: str, extra_parts: list[str]) -> str:
+    extra = "\n".join(part for part in extra_parts if part)
+    if not extra:
+        return existing
+    if existing:
+        return f"{existing}\n{extra}"
+    return extra
+
+
+def _split_responses_instruction_item_content(item: Mapping[str, JsonValue]) -> tuple[str, JsonValue | None]:
+    content = item.get("content")
+    if content is None:
+        return "", None
+    if isinstance(content, str):
+        return content, None
+    if is_json_list(content):
+        instruction_parts: list[str] = []
+        preserved_parts: list[JsonValue] = []
+        for part in _json_parts(content):
+            text = _responses_instruction_content_text(part)
+            if text is not None:
+                if text:
+                    instruction_parts.append(text)
+                continue
+            preserved_parts.append(part)
+        preserved_content: JsonValue | None = preserved_parts if preserved_parts else None
+        return "\n".join(instruction_parts), preserved_content
+    text = _responses_instruction_content_text(content)
+    if text is not None:
+        return text, None
+    return "", content
+
+
+def _responses_instruction_item_text(item: Mapping[str, JsonValue]) -> str:
+    instruction_text, _ = _split_responses_instruction_item_content(item)
+    return instruction_text
+
+
+def _responses_instruction_content_text(content: JsonValue) -> str | None:
+    if isinstance(content, str):
+        return content
+    content_mapping = _json_mapping_or_none(content)
+    if content_mapping is None:
+        return None
+    text = content_mapping.get("text")
+    return text if isinstance(text, str) else None
 
 
 def _sanitize_interleaved_reasoning_input_item(item: JsonValue) -> JsonValue | None:
@@ -428,6 +557,11 @@ class ResponsesTextControls(BaseModel):
 class ResponsesRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
 
+    @model_validator(mode="before")
+    @classmethod
+    def _move_input_instruction_messages(cls, data: JsonValue) -> JsonValue:
+        return _normalize_responses_input_instructions(data)
+
     model: str = Field(min_length=1)
     instructions: str
     input: JsonValue
@@ -480,7 +614,9 @@ class ResponsesRequest(BaseModel):
     def _validate_truncation(cls, value: str | None) -> str | None:
         if value is None:
             return value
-        raise ValueError("truncation is not supported")
+        if value not in {"auto", "disabled"}:
+            raise ValueError("truncation must be 'auto' or 'disabled'")
+        return value
 
     @field_validator("store")
     @classmethod
@@ -529,6 +665,11 @@ class ResponsesRequest(BaseModel):
 
 class ResponsesCompactRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _move_input_instruction_messages(cls, data: JsonValue) -> JsonValue:
+        return _normalize_responses_input_instructions(data)
 
     model: str = Field(min_length=1)
     instructions: str
@@ -579,10 +720,13 @@ class ResponsesCompactRequest(BaseModel):
 
 _UNSUPPORTED_UPSTREAM_FIELDS = {
     "max_output_tokens",
+    "metadata",
     "prompt_cache_retention",
     "safety_identifier",
     "temperature",
     "top_p",
+    "truncation",
+    "user",
 }
 
 

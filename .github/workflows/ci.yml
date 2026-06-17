@@ -4,217 +4,354 @@ on:
   push:
     branches: ["main"]
   pull_request:
+    types: [opened, reopened, synchronize, edited, ready_for_review]
+  merge_group:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
-  frontend-lint:
-    name: Frontend lint (eslint)
-    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'release-please--branches--') }}
+  # Detect changed areas so PRs can skip unrelated expensive jobs.
+  # Pushes to main and merge queue events still run the full suite.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      frontend: ${{ steps.force.outputs.full_suite || steps.filter.outputs.frontend }}
+      backend: ${{ steps.force.outputs.full_suite || steps.filter.outputs.backend }}
+      helm: ${{ steps.force.outputs.full_suite || steps.filter.outputs.helm }}
+      docker: ${{ steps.force.outputs.full_suite || steps.filter.outputs.docker }}
+      migrations: ${{ steps.force.outputs.full_suite || steps.filter.outputs.migrations }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - name: Detect full-suite events
+        id: force
+        run: |
+          if [[ "${{ github.event_name }}" == "push" || "${{ github.event_name }}" == "merge_group" ]]; then
+            echo "full_suite=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "full_suite=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Detect file changes
+        id: filter
+        if: steps.force.outputs.full_suite != 'true'
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+              - 'Makefile'
+              - '.github/workflows/ci.yml'
+            backend:
+              - '.github/scripts/**'
+              - 'app/**'
+              - 'tests/**'
+              - 'config/**'
+              - 'scripts/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - 'Makefile'
+              - '.github/workflows/ci.yml'
+            helm:
+              - 'deploy/helm/**'
+              - 'Makefile'
+              - '.github/workflows/ci.yml'
+            docker:
+              - 'Dockerfile'
+              - 'Dockerfile.*'
+              - '.dockerignore'
+              - 'docker-compose*.yml'
+              - 'app/**'
+              - 'config/**'
+              - 'frontend/**'
+              - 'scripts/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.github/workflows/ci.yml'
+            migrations:
+              - 'app/db/alembic/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.github/workflows/ci.yml'
+
+  contributors:
+    name: Contributors attribution
     runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check all-contributors coverage
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python .github/scripts/check_all_contributors.py
+
+  beta-release-guard:
+    name: Beta release guard
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch PR base branch
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: git fetch origin "${BASE_REF}:refs/remotes/origin/${BASE_REF}" --force
+
+      - name: Require validated canonical beta release PRs
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          python -m scripts.guard_beta_release \
+            --mode pr \
+            --base-ref "origin/${BASE_REF}" \
+            --head-ref "${HEAD_REF}"
+
+  frontend-lint:
+    name: Frontend lint (eslint)
+    runs-on: ubuntu-24.04
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
 
       - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          bun-version: "1.3.10"
+          bun-version: "1.3.14"
 
-      - name: Install frontend dependencies
-        run: cd frontend && bun install --frozen-lockfile
+      - name: Cache Bun dependencies
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
+        with:
+          path: |
+            ~/.bun/install/cache
+            frontend/node_modules
+          key: bun-1.3.14-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('frontend/bun.lock') }}
+          restore-keys: |
+            bun-1.3.14-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Run frontend lint
-        run: cd frontend && bun run lint
+        run: make frontend-lint
 
   frontend-typecheck:
     name: Frontend type check (tsc)
-    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'release-please--branches--') }}
     runs-on: ubuntu-24.04
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
 
       - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          bun-version: "1.3.10"
+          bun-version: "1.3.14"
 
-      - name: Install frontend dependencies
-        run: cd frontend && bun install --frozen-lockfile
+      - name: Cache Bun dependencies
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
+        with:
+          path: |
+            ~/.bun/install/cache
+            frontend/node_modules
+          key: bun-1.3.14-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('frontend/bun.lock') }}
+          restore-keys: |
+            bun-1.3.14-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Run frontend type check
-        run: cd frontend && bun run typecheck
+        run: make frontend-typecheck
 
   frontend-test:
     name: Frontend tests (vitest + coverage)
-    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'release-please--branches--') }}
     runs-on: ubuntu-24.04
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6.0.2
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
-          node-version: "22"
+          persist-credentials: false
 
       - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          bun-version: "1.3.10"
+          bun-version: "1.3.14"
 
-      - name: Install frontend dependencies
-        run: cd frontend && bun install --frozen-lockfile
+      - name: Cache Bun dependencies
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
+        with:
+          path: |
+            ~/.bun/install/cache
+            frontend/node_modules
+          key: bun-1.3.14-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('frontend/bun.lock') }}
+          restore-keys: |
+            bun-1.3.14-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Run frontend tests with coverage
-        run: cd frontend && bun run test:coverage
+        run: make frontend-test
 
   frontend-build:
     name: Frontend build (vite)
-    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'release-please--branches--') }}
     runs-on: ubuntu-24.04
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
 
       - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          bun-version: "1.3.10"
+          bun-version: "1.3.14"
 
-      - name: Install frontend dependencies
-        run: cd frontend && bun install --frozen-lockfile
+      - name: Cache Bun dependencies
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
+        with:
+          path: |
+            ~/.bun/install/cache
+            frontend/node_modules
+          key: bun-1.3.14-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('frontend/bun.lock') }}
+          restore-keys: |
+            bun-1.3.14-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Build frontend
-        run: cd frontend && bun run build
-
-  openspec:
-    name: OpenSpec validate
-    runs-on: ubuntu-24.04
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6.0.2
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v8.0.0
-        with:
-          python-version: "3.13"
-          enable-cache: true
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      - name: Install dependencies
-        run: uv sync --dev --frozen
-
-      - name: Validate OpenSpec specs
-        run: npx --yes @fission-ai/openspec@1.3.1 validate --specs
+        run: make frontend-build
 
   lint:
     name: Lint (ruff)
     runs-on: ubuntu-24.04
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v8.0.0
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
           python-version: "3.13"
           enable-cache: true
 
       - name: Ruff check
-        run: uvx ruff check .
-
-      - name: Ruff format (check)
-        run: uvx ruff format --check .
+        run: make lint
 
   typecheck:
     name: Type check (ty)
     runs-on: ubuntu-24.04
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v8.0.0
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
           python-version: "3.13"
           enable-cache: true
 
-      - name: Install dependencies
-        run: uv sync --dev --frozen
-
       - name: Ty check
-        run: uv run ty check
+        run: make typecheck
 
   test:
     name: Tests (pytest, ${{ matrix.slice.name }})
-    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'release-please--branches--') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    needs: changes
     strategy:
       fail-fast: false
       matrix:
         slice:
           - name: unit
-            paths: "tests/unit tests/test_request_logs_options_api.py"
           - name: integration-core
-            paths: "tests/integration --ignore=tests/integration/test_http_responses_bridge.py --ignore=tests/integration/test_proxy_websocket_responses.py"
-            extra_args: ""
           - name: integration-bridge
-            paths: "tests/integration/test_http_responses_bridge.py tests/integration/test_proxy_websocket_responses.py"
-            extra_args: "-vv"
           - name: e2e
-            paths: "tests/e2e"
-            extra_args: ""
     env:
       PYTHONFAULTHANDLER: "1"
 
     steps:
+      - name: Skip backend tests for unrelated changes
+        if: needs.changes.outputs.backend != 'true'
+        run: echo "Backend files unchanged; required pytest context satisfied."
+
       - name: Checkout repository
-        uses: actions/checkout@v6.0.2
+        if: needs.changes.outputs.backend == 'true'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
 
       - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+        if: needs.changes.outputs.backend == 'true'
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          bun-version: "1.3.10"
+          bun-version: "1.3.14"
 
-      - name: Install frontend dependencies
-        run: cd frontend && bun install --frozen-lockfile
-
-      - name: Build frontend assets
-        run: cd frontend && bun run build
+      - name: Cache Bun dependencies
+        if: needs.changes.outputs.backend == 'true'
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
+        with:
+          path: |
+            ~/.bun/install/cache
+            frontend/node_modules
+          key: bun-1.3.14-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('frontend/bun.lock') }}
+          restore-keys: |
+            bun-1.3.14-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v8.0.0
+        if: needs.changes.outputs.backend == 'true'
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
           python-version: "3.13"
           enable-cache: true
 
-      - name: Install dependencies
-        run: uv sync --dev --frozen
-
       - name: Run tests
-        run: uv run pytest -q -ra ${{ matrix.slice.extra_args }} -o faulthandler_timeout=300 -o faulthandler_exit_on_timeout=true --timeout=180 --timeout-method=thread --durations=20 ${{ matrix.slice.paths }}
+        if: needs.changes.outputs.backend == 'true'
+        run: make test-${{ matrix.slice.name }}
 
   test-postgres:
     name: Tests (pytest, PostgreSQL)
-    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'release-please--branches--') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    needs: changes
     services:
       postgres:
         image: postgres:16
@@ -234,145 +371,334 @@ jobs:
       PYTHONFAULTHANDLER: "1"
 
     steps:
+      - name: Skip PostgreSQL tests for unrelated changes
+        if: needs.changes.outputs.backend != 'true'
+        run: echo "Backend files unchanged; required PostgreSQL context satisfied."
+
       - name: Checkout repository
-        uses: actions/checkout@v6.0.2
+        if: needs.changes.outputs.backend == 'true'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
 
       - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+        if: needs.changes.outputs.backend == 'true'
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          bun-version: "1.3.10"
+          bun-version: "1.3.14"
 
-      - name: Install frontend dependencies
-        run: cd frontend && bun install --frozen-lockfile
-
-      - name: Build frontend assets
-        run: cd frontend && bun run build
+      - name: Cache Bun dependencies
+        if: needs.changes.outputs.backend == 'true'
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
+        with:
+          path: |
+            ~/.bun/install/cache
+            frontend/node_modules
+          key: bun-1.3.14-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('frontend/bun.lock') }}
+          restore-keys: |
+            bun-1.3.14-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v8.0.0
+        if: needs.changes.outputs.backend == 'true'
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
           python-version: "3.13"
           enable-cache: true
 
-      - name: Install dependencies
-        run: uv sync --dev --frozen
-
       - name: Run tests
-        run: uv run pytest -q -ra -o faulthandler_timeout=300 -o faulthandler_exit_on_timeout=true --timeout=180 --timeout-method=thread --durations=20
+        if: needs.changes.outputs.backend == 'true'
+        run: make test-postgres
 
   migration-check:
     name: Migration check (alembic)
     runs-on: ubuntu-24.04
+    needs: changes
+    if: needs.changes.outputs.migrations == 'true' || needs.changes.outputs.backend == 'true'
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v8.0.0
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
           python-version: "3.13"
           enable-cache: true
 
-      - name: Install dependencies
-        run: uv sync --dev --frozen
-
       - name: Validate migration policy and drift
-        shell: bash
-        run: |
-          set -euo pipefail
-          TMP_DB="$(mktemp -u /tmp/codex-lb-cinamon-ci-migrate-XXXXXX.db)"
-          DB_URL="sqlite+aiosqlite:///${TMP_DB}"
-          uv run codex-lb-cinamon-db --db-url "${DB_URL}" upgrade head
-          uv run codex-lb-cinamon-db --db-url "${DB_URL}" check
+        run: make migration-check
+
+  migration-check-postgres:
+    name: Migration check (alembic, PostgreSQL)
+    runs-on: ubuntu-24.04
+    needs: changes
+    if: needs.changes.outputs.migrations == 'true' || needs.changes.outputs.backend == 'true'
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: codex_lb
+          POSTGRES_PASSWORD: codex_lb
+          POSTGRES_DB: codex_lb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U codex_lb -d codex_lb"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      - name: Validate migration policy and drift on PostgreSQL
+        run: make migration-check-postgres
 
   package:
     name: Package (build)
     runs-on: ubuntu-24.04
+    needs: changes
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true'
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
 
       - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          bun-version: "1.3.10"
+          bun-version: "1.3.14"
 
-      - name: Install frontend dependencies
-        run: cd frontend && bun install --frozen-lockfile
-
-      - name: Build frontend assets
-        run: cd frontend && bun run build
+      - name: Cache Bun dependencies
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
+        with:
+          path: |
+            ~/.bun/install/cache
+            frontend/node_modules
+          key: bun-1.3.14-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('frontend/bun.lock') }}
+          restore-keys: |
+            bun-1.3.14-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v8.0.0
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
           python-version: "3.13"
           enable-cache: true
 
-      - name: Install package (runtime deps)
-        run: uv sync --frozen --no-dev
-
-      - name: Import check
-        run: uv run python -c "import app; import app.main; print('import ok')"
-
-      - name: Build sdist + wheel
-        run: uvx --from build python -m build
-
-      - name: Verify wheel contains frontend assets
-        shell: bash
-        run: |
-          python - <<'PY'
-          import glob
-          import zipfile
-
-          wheels = glob.glob("dist/*.whl")
-          if not wheels:
-              raise SystemExit("no wheel found in dist/")
-
-          wheel = wheels[0]
-          with zipfile.ZipFile(wheel) as zf:
-              names = set(zf.namelist())
-              has_index = "app/static/index.html" in names
-              has_js = any(name.startswith("app/static/assets/") and name.endswith(".js") for name in names)
-              has_css = any(name.startswith("app/static/assets/") and name.endswith(".css") for name in names)
-
-          if not (has_index and has_js and has_css):
-              raise SystemExit(
-                  f"frontend assets missing in wheel: index={has_index} js={has_js} css={has_css}"
-              )
-          print(f"frontend assets verified in wheel: {wheel}")
-          PY
+      - name: Build and verify package
+        run: make package
 
   docker:
     name: Docker build
-    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'release-please--branches--') }}
     runs-on: ubuntu-24.04
+    needs: changes
+    if: needs.changes.outputs.docker == 'true'
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    env:
+      DOCKER_CACHE_SCOPE: ${{ github.event_name == 'pull_request' && format('codex-lb-cinamon-pr-{0}', github.event.pull_request.number) || 'codex-lb-cinamon-main' }}
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5
 
       - name: Build Docker image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
         with:
           context: .
           file: Dockerfile
           push: false
           load: true
           tags: codex-lb-cinamon:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ env.DOCKER_CACHE_SCOPE }}
+          cache-to: type=gha,mode=max,scope=${{ env.DOCKER_CACHE_SCOPE }}
 
-      - name: Scan Docker image with Trivy
-        uses: aquasecurity/trivy-action@0.35.0
+      - name: Scan Docker image with Trivy (SARIF)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: codex-lb-cinamon:ci
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH,MEDIUM,LOW
+          ignore-unfixed: true
+
+      - name: Upload Trivy scan results to GitHub Security
+        uses: github/codeql-action/upload-sarif@9e0d7b8d25671d64c341c19c0152d693099fb5ba
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        with:
+          sarif_file: trivy-results.sarif
+          # Keep PR and main uploads in the same CI category so Code Scanning
+          # can compare pull-request alerts against the default-branch baseline.
+          category: .github/workflows/ci.yml:docker
+
+      - name: Enforce Trivy high-severity gate
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           image-ref: codex-lb-cinamon:ci
           format: table
           exit-code: 1
-          severity: CRITICAL
+          severity: CRITICAL,HIGH
           ignore-unfixed: true
+
+  helm-lint:
+    name: Helm lint + template + kubeconform
+    runs-on: ubuntu-24.04
+    needs: changes
+    if: needs.changes.outputs.helm == 'true'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - name: Set up Helm
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2
+
+      - name: Cache kubeconform
+        id: cache-kubeconform
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
+        with:
+          path: .cache/ci-tools/kubeconform
+          key: kubeconform-0.7.0-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Install kubeconform
+        run: |
+          set -euo pipefail
+          KUBECONFORM_VERSION="0.7.0"
+          TOOL_DIR=".cache/ci-tools/kubeconform"
+          TOOL_PATH="${TOOL_DIR}/kubeconform"
+          if [[ ! -x "${TOOL_PATH}" ]]; then
+            mkdir -p "${TOOL_DIR}"
+            OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+            ARCH=$(uname -m)
+            case "$ARCH" in
+              x86_64) ARCH="amd64" ;;
+              aarch64) ARCH="arm64" ;;
+            esac
+            ASSET="kubeconform-${OS}-${ARCH}.tar.gz"
+            BASE_URL="https://github.com/yannh/kubeconform/releases/download/v${KUBECONFORM_VERSION}"
+            curl -fsSLO "${BASE_URL}/CHECKSUMS"
+            curl -fsSLO "${BASE_URL}/${ASSET}"
+            grep "  ${ASSET}$" CHECKSUMS | sha256sum -c -
+            tar xzf "${ASSET}" -C "${TOOL_DIR}" kubeconform
+          fi
+          sudo install -m 0755 "${TOOL_PATH}" /usr/local/bin/kubeconform
+
+      - name: Helm lint + template + kubeconform
+        run: make helm-check
+
+  helm-smoke-kind:
+    name: Helm smoke install (kind)
+    runs-on: ubuntu-24.04
+    needs: changes
+    if: needs.changes.outputs.helm == 'true'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - name: Set up Helm
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2
+
+      - name: Cache kind
+        id: cache-kind
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
+        with:
+          path: .cache/ci-tools/kind
+          key: kind-0.30.0-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Install kind
+        run: |
+          set -euo pipefail
+          KIND_VERSION="0.30.0"
+          TOOL_DIR=".cache/ci-tools/kind"
+          TOOL_PATH="${TOOL_DIR}/kind"
+          if [[ ! -x "${TOOL_PATH}" ]]; then
+            mkdir -p "${TOOL_DIR}"
+            ARCH=$(uname -m)
+            case "$ARCH" in
+              x86_64) KIND_ARCH="amd64" ;;
+              aarch64) KIND_ARCH="arm64" ;;
+              *) echo "unsupported arch: ${ARCH}"; exit 1 ;;
+            esac
+            BASE_URL="https://github.com/kubernetes-sigs/kind/releases/download/v${KIND_VERSION}"
+            ASSET="kind-linux-${KIND_ARCH}"
+            curl -fsSLo "${TOOL_DIR}/${ASSET}" "${BASE_URL}/${ASSET}"
+            curl -fsSLo "${TOOL_DIR}/${ASSET}.sha256sum" "${BASE_URL}/${ASSET}.sha256sum"
+            (cd "${TOOL_DIR}" && sha256sum -c "${ASSET}.sha256sum")
+            mv "${TOOL_DIR}/${ASSET}" "${TOOL_PATH}"
+            chmod +x "${TOOL_PATH}"
+          fi
+          sudo install -m 0755 "${TOOL_PATH}" /usr/local/bin/kind
+
+      - name: Helm smoke install
+        run: make helm-smoke-kind
+
+  ci-required:
+    name: CI Required
+    runs-on: ubuntu-24.04
+    if: always()
+    needs:
+      - changes
+      - contributors
+      - beta-release-guard
+      - frontend-lint
+      - frontend-typecheck
+      - frontend-test
+      - frontend-build
+      - lint
+      - typecheck
+      - test
+      - test-postgres
+      - migration-check
+      - migration-check-postgres
+      - package
+      - docker
+      - helm-lint
+      - helm-smoke-kind
+
+    steps:
+      - name: Require every CI job to pass
+        env:
+          NEEDS_JSON: ${{ toJson(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+
+          needs = json.loads(os.environ["NEEDS_JSON"])
+          failed = {
+              name: details["result"]
+              for name, details in sorted(needs.items())
+              if details.get("result") not in {"success", "skipped"}
+          }
+          if failed:
+              for name, result in failed.items():
+                  print(f"{name}: {result}")
+              sys.exit(1)
+          print("all required CI jobs passed")
+          PY

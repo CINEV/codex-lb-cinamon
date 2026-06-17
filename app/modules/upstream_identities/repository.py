@@ -4,6 +4,7 @@ import hashlib
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
+from typing import cast
 
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.exc import IntegrityError, OperationalError
@@ -206,7 +207,7 @@ def split_route_families(value: str | None) -> tuple[str, ...]:
 
 def normalize_route_families(values: Iterable[str]) -> tuple[PlatformRouteFamily, ...]:
     normalized = sorted({value.strip() for value in values if value.strip()})
-    return tuple(normalized)  # type: ignore[return-value]
+    return cast("tuple[PlatformRouteFamily, ...]", tuple(normalized))
 
 
 def _split_route_families(value: str | None) -> tuple[str, ...]:

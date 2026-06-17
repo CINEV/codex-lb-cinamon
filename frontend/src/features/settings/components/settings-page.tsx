@@ -4,17 +4,21 @@ import { Settings } from "lucide-react";
 import { AlertMessage } from "@/components/alert-message";
 import { LoadingOverlay } from "@/components/layout/loading-overlay";
 import { ApiKeysSection } from "@/features/api-keys/components/api-keys-section";
+import { useAccounts } from "@/features/accounts/hooks/use-accounts";
 import { FirewallSection } from "@/features/firewall/components/firewall-section";
+import { QuotaPlannerSection } from "@/features/quota-planner/components/quota-planner-section";
 import { buildSettingsUpdateRequest } from "@/features/settings/payload";
 import { AppearanceSettings } from "@/features/settings/components/appearance-settings";
 import { ImportSettings } from "@/features/settings/components/import-settings";
+import { GuestAccessSettings } from "@/features/settings/components/guest-access-settings";
 import { PasswordSettings } from "@/features/settings/components/password-settings";
 import { RoutingSettings } from "@/features/settings/components/routing-settings";
 import { SessionSettings } from "@/features/settings/components/session-settings";
 import { SettingsSkeleton } from "@/features/settings/components/settings-skeleton";
+import { UpstreamProxySettings } from "@/features/settings/components/upstream-proxy-settings";
 import { StickySessionsSection } from "@/features/sticky-sessions/components/sticky-sessions-section";
 import { useAuthStore } from "@/features/auth/hooks/use-auth";
-import { useSettings } from "@/features/settings/hooks/use-settings";
+import { useSettings, useUpstreamProxyAdmin } from "@/features/settings/hooks/use-settings";
 import type { SettingsUpdateRequest } from "@/features/settings/schemas";
 import { getErrorMessageOrNull } from "@/utils/errors";
 
@@ -24,13 +28,32 @@ const TotpSettings = lazy(() =>
 
 export function SettingsPage() {
   const { settingsQuery, updateSettingsMutation } = useSettings();
+  const { accountsQuery } = useAccounts();
+  const {
+    upstreamProxyQuery,
+    createEndpointMutation,
+    createPoolMutation,
+    addPoolMemberMutation,
+  } = useUpstreamProxyAdmin();
   const authMode = useAuthStore((state) => state.authMode);
   const passwordManagementEnabled = useAuthStore((state) => state.passwordManagementEnabled);
   const passwordSessionActive = useAuthStore((state) => state.passwordSessionActive);
+  const canWrite = useAuthStore((state) => state.canWrite);
 
   const settings = settingsQuery.data;
-  const busy = updateSettingsMutation.isPending;
-  const error = getErrorMessageOrNull(settingsQuery.error) || getErrorMessageOrNull(updateSettingsMutation.error);
+  const busy =
+    updateSettingsMutation.isPending ||
+    createEndpointMutation.isPending ||
+    createPoolMutation.isPending ||
+    addPoolMemberMutation.isPending;
+  const controlsDisabled = busy || !canWrite;
+  const error =
+    getErrorMessageOrNull(settingsQuery.error) ||
+    getErrorMessageOrNull(upstreamProxyQuery.error) ||
+    getErrorMessageOrNull(updateSettingsMutation.error) ||
+    getErrorMessageOrNull(createEndpointMutation.error) ||
+    getErrorMessageOrNull(createPoolMutation.error) ||
+    getErrorMessageOrNull(addPoolMemberMutation.error);
 
   const handleSave = async (payload: SettingsUpdateRequest) => {
     await updateSettingsMutation.mutateAsync(payload);
@@ -52,6 +75,11 @@ export function SettingsPage() {
       ) : (
         <>
           {error ? <AlertMessage variant="error">{error}</AlertMessage> : null}
+          {!canWrite ? (
+            <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs font-medium text-foreground">
+              You are viewing the dashboard with read-only guest access. Admin controls are disabled.
+            </div>
+          ) : null}
 
           {authMode === "trusted_header" ? (
             <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs font-medium text-foreground">
@@ -70,17 +98,45 @@ export function SettingsPage() {
           <div className="space-y-4">
             <AppearanceSettings />
             <RoutingSettings
-              key={settings.openaiCacheAffinityMaxAgeSeconds}
+              key={[
+                settings.openaiCacheAffinityMaxAgeSeconds,
+                settings.warmupModel,
+                settings.limitWarmupModel,
+                settings.limitWarmupPrompt,
+                settings.limitWarmupCooldownSeconds,
+              ].join(":")}
               settings={settings}
-              busy={busy}
+              accounts={accountsQuery.data ?? []}
+              accountsLoading={accountsQuery.isLoading}
+              busy={controlsDisabled}
               onSave={handleSave}
             />
-            <ImportSettings settings={settings} busy={busy} onSave={handleSave} />
-            <PasswordSettings disabled={busy} />
-            {passwordManagementEnabled ? (
+            {upstreamProxyQuery.data ? (
+              <UpstreamProxySettings
+                admin={upstreamProxyQuery.data}
+                busy={controlsDisabled}
+                onSaveSettings={handleSave}
+                onCreateEndpoint={(payload) => createEndpointMutation.mutateAsync(payload)}
+                onCreatePool={(payload) => createPoolMutation.mutateAsync(payload)}
+                onAddPoolMember={(poolId, payload) =>
+                  addPoolMemberMutation.mutateAsync({ poolId, payload })
+                }
+              />
+            ) : null}
+            <ImportSettings settings={settings} busy={controlsDisabled} onSave={handleSave} />
+            {canWrite ? (
+              <GuestAccessSettings
+                settings={settings}
+                busy={busy}
+                onSave={handleSave}
+                onRefresh={() => settingsQuery.refetch()}
+              />
+            ) : null}
+            {canWrite ? <PasswordSettings disabled={busy} /> : null}
+            {canWrite && passwordManagementEnabled ? (
               <SessionSettings settings={settings} busy={busy} onSave={handleSave} />
             ) : null}
-            {passwordManagementEnabled && passwordSessionActive ? (
+            {canWrite && passwordManagementEnabled && passwordSessionActive ? (
               <Suspense fallback={null}>
                 <TotpSettings settings={settings} disabled={busy} onSave={handleSave} />
               </Suspense>
@@ -88,13 +144,14 @@ export function SettingsPage() {
 
             <ApiKeysSection
               apiKeyAuthEnabled={settings.apiKeyAuthEnabled}
-              disabled={busy}
+              disabled={controlsDisabled}
               onApiKeyAuthEnabledChange={(enabled) =>
                 void handleSave(buildSettingsUpdateRequest(settings, { apiKeyAuthEnabled: enabled }))
               }
             />
-            <FirewallSection />
-            <StickySessionsSection />
+            <FirewallSection disabled={controlsDisabled} />
+            <QuotaPlannerSection disabled={controlsDisabled} />
+            <StickySessionsSection disabled={controlsDisabled} />
           </div>
 
           <LoadingOverlay visible={!!settings && busy} label="Saving settings..." />

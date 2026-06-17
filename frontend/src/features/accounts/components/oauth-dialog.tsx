@@ -1,5 +1,6 @@
 import { Check, CircleAlert, Copy, ExternalLink, Loader2, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState, type MouseEvent } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { OAuthState } from "@/features/accounts/schemas";
 import { formatCountdown } from "@/utils/formatters";
+import { copyToClipboard } from "@/utils/clipboard";
 
 type Stage = "intro" | "browser" | "device" | "success" | "error";
 
@@ -27,10 +29,29 @@ function getStage(state: OAuthState): Stage {
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
 
-  const handleCopy = useCallback(async () => {
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = useCallback(async (event: MouseEvent<HTMLButtonElement>) => {
+    const trigger = event.currentTarget;
+    const dialogContainer = trigger.closest("[role='dialog']");
+    const blurAfterCopy = event.detail > 0;
+
+    try {
+      const copiedToClipboard = await copyToClipboard(text, {
+        container: dialogContainer instanceof HTMLElement ? dialogContainer : undefined,
+      });
+      if (!copiedToClipboard) {
+        toast.error("Failed to copy");
+        return;
+      }
+
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Failed to copy");
+    } finally {
+      if (blurAfterCopy) {
+        trigger.blur();
+      }
+    }
   }, [text]);
 
   return (
@@ -39,7 +60,8 @@ function CopyButton({ text }: { text: string }) {
       size="sm"
       variant="ghost"
       className="h-7 cursor-pointer gap-1 px-2 text-xs disabled:cursor-not-allowed"
-      onClick={() => void handleCopy()}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={(event) => void handleCopy(event)}
     >
       {copied ? (
         <>
@@ -56,21 +78,21 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-function ManualCallbackInput({
-  onSubmit,
-  disabled = false,
-}: {
+type ManualCallbackInputProps = {
   onSubmit: (callbackUrl: string) => Promise<void>;
   disabled?: boolean;
-}) {
+};
+
+function ManualCallbackInput(props: ManualCallbackInputProps) {
+  return <ManualCallbackInputBody key={props.disabled ? "disabled" : "enabled"} {...props} />;
+}
+
+function ManualCallbackInputBody({
+  onSubmit,
+  disabled = false,
+}: ManualCallbackInputProps) {
   const [callbackUrl, setCallbackUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (disabled) {
-      setCallbackUrl("");
-    }
-  }, [disabled]);
 
   const handleSubmit = useCallback(async () => {
     if (!callbackUrl.trim()) return;
@@ -93,6 +115,7 @@ function ManualCallbackInput({
       <div className="flex items-center gap-2">
         <input
           type="text"
+          aria-label="OAuth callback URL"
           value={callbackUrl}
           onChange={(e) => setCallbackUrl(e.target.value)}
           disabled={disabled}
@@ -128,13 +151,11 @@ export function OauthDialog({
   state,
   onOpenChange,
   onStart,
-  onComplete,
   onManualCallback,
   onReset,
 }: OauthDialogProps) {
   const [selectedMethod, setSelectedMethod] = useState<"browser" | "device">("browser");
   const stage = getStage(state);
-  const completedRef = useRef(false);
   const browserRefreshInProgress = stage === "browser" && state.status === "starting";
   const dialogDescription =
     stage === "success"
@@ -146,16 +167,6 @@ export function OauthDialog({
           : stage === "device"
             ? "Complete authorization with the displayed device code."
             : "Choose a sign-in method and complete authorization.";
-
-  useEffect(() => {
-    if (stage === "success" && !completedRef.current) {
-      completedRef.current = true;
-      void onComplete();
-    }
-    if (stage === "intro") {
-      completedRef.current = false;
-    }
-  }, [stage, onComplete]);
 
   const close = (next: boolean) => {
     onOpenChange(next);

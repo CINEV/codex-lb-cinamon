@@ -11,6 +11,7 @@ from app.core.utils.time import utcnow
 from app.db.models import Account, AccountStatus, StickySessionKind
 from app.db.session import SessionLocal
 from app.modules.accounts.repository import AccountsRepository
+from app.modules.proxy.durable_bridge_repository import DurableBridgeRepository
 from app.modules.settings.repository import SettingsRepository
 from app.modules.sticky_sessions.cleanup_scheduler import StickySessionCleanupScheduler
 
@@ -85,6 +86,58 @@ async def _insert_sticky_session(
                 "provider_kind": provider_kind,
                 "routing_subject_id": routing_subject_id or account_id,
                 "account_id": account_id if provider_kind == "chatgpt_web" else None,
+                "timestamp": timestamp,
+            },
+        )
+        await session.commit()
+
+
+async def _insert_http_bridge_session(
+    *,
+    session_id: str,
+    state: str,
+    last_seen_offset_seconds: int,
+) -> None:
+    timestamp = utcnow() - timedelta(seconds=last_seen_offset_seconds)
+    async with SessionLocal() as session:
+        await session.execute(
+            text(
+                """
+                INSERT INTO http_bridge_sessions (
+                    id, session_key_kind, session_key_value, session_key_hash, api_key_scope,
+                    owner_epoch, state, last_seen_at, created_at, updated_at
+                )
+                VALUES (
+                    :id, 'session_header', :key_value, :key_hash, '__anonymous__',
+                    1, :state, :timestamp, :timestamp, :timestamp
+                )
+                """
+            ),
+            {
+                "id": session_id,
+                "key_value": f"{session_id}-key",
+                "key_hash": f"{session_id}-hash",
+                "state": state,
+                "timestamp": timestamp,
+            },
+        )
+        await session.execute(
+            text(
+                """
+                INSERT INTO http_bridge_session_aliases (
+                    id, session_id, alias_kind, alias_value, alias_hash, api_key_scope, created_at, updated_at
+                )
+                VALUES (
+                    :alias_id, :session_id, 'previous_response_id', :alias_value, :alias_hash,
+                    '__anonymous__', :timestamp, :timestamp
+                )
+                """
+            ),
+            {
+                "alias_id": f"{session_id}-alias",
+                "session_id": session_id,
+                "alias_value": f"{session_id}-response",
+                "alias_hash": f"{session_id}-alias-hash",
                 "timestamp": timestamp,
             },
         )
@@ -615,7 +668,7 @@ async def test_sticky_sessions_api_deletes_platform_row_with_provider_query(asyn
 
 
 @pytest.mark.asyncio
-async def test_sticky_sessions_cleanup_scheduler_removes_only_stale_prompt_cache(db_setup):
+async def test_sticky_sessions_cleanup_scheduler_removes_stale_prompt_cache_and_closed_bridge_sessions(db_setup):
     accounts = await _create_accounts()
     await _set_affinity_ttl(60)
     await _insert_sticky_session(
@@ -630,6 +683,21 @@ async def test_sticky_sessions_cleanup_scheduler_removes_only_stale_prompt_cache
         kind=StickySessionKind.STICKY_THREAD,
         updated_at_offset_seconds=600,
     )
+    await _insert_http_bridge_session(
+        session_id="closed-stale-session",
+        state="closed",
+        last_seen_offset_seconds=600,
+    )
+    await _insert_http_bridge_session(
+        session_id="active-stale-session",
+        state="active",
+        last_seen_offset_seconds=600,
+    )
+    await _insert_http_bridge_session(
+        session_id="closed-fresh-session",
+        state="closed",
+        last_seen_offset_seconds=10,
+    )
 
     scheduler = StickySessionCleanupScheduler(interval_seconds=300, enabled=True)
     await scheduler._cleanup_once()
@@ -638,5 +706,114 @@ async def test_sticky_sessions_cleanup_scheduler_removes_only_stale_prompt_cache
         remaining = {
             row[0] for row in (await session.execute(text("SELECT key FROM sticky_sessions ORDER BY key"))).fetchall()
         }
+        bridge_remaining = {
+            row[0]
+            for row in (await session.execute(text("SELECT id FROM http_bridge_sessions ORDER BY id"))).fetchall()
+        }
+        alias_remaining = {
+            row[0]
+            for row in (
+                await session.execute(text("SELECT session_id FROM http_bridge_session_aliases ORDER BY session_id"))
+            ).fetchall()
+        }
 
     assert remaining == {"cleanup-durable"}
+    assert bridge_remaining == {"active-stale-session", "closed-fresh-session"}
+    assert alias_remaining == {"active-stale-session", "closed-fresh-session"}
+
+
+@pytest.mark.asyncio
+async def test_durable_bridge_closed_session_purge_drains_multiple_batches(db_setup):
+    for index in range(3):
+        await _insert_http_bridge_session(
+            session_id=f"closed-batched-session-{index}",
+            state="closed",
+            last_seen_offset_seconds=600,
+        )
+    await _insert_http_bridge_session(
+        session_id="active-batched-session",
+        state="active",
+        last_seen_offset_seconds=600,
+    )
+
+    async with SessionLocal() as session:
+        repo = DurableBridgeRepository(session)
+        deleted = await repo.purge_closed_before(utcnow() - timedelta(seconds=60), batch_size=2)
+
+    async with SessionLocal() as session:
+        bridge_remaining = {
+            row[0]
+            for row in (await session.execute(text("SELECT id FROM http_bridge_sessions ORDER BY id"))).fetchall()
+        }
+        alias_remaining = {
+            row[0]
+            for row in (
+                await session.execute(text("SELECT session_id FROM http_bridge_session_aliases ORDER BY session_id"))
+            ).fetchall()
+        }
+
+    assert deleted == 3
+    assert bridge_remaining == {"active-batched-session"}
+    assert alias_remaining == {"active-batched-session"}
+
+
+@pytest.mark.asyncio
+async def test_sticky_sessions_api_deletes_filtered_chunks_large_match_set(async_client):
+    """Regression test for the codex-lb #787 (D) bug: POST
+    /api/sticky-sessions/delete-filtered used to issue a single
+    DELETE...OR (key=:k AND kind=:t)... statement whose bind-parameter
+    count grew with the match-set size, and trip SQLite's
+    SQLITE_LIMIT_VARIABLE_NUMBER (999 on older libsqlite, 32766 on
+    newer) with a 500 internal_error.
+
+    Insert significantly more rows than the
+    ``_DELETE_ENTRIES_CHUNK_SIZE`` constant guards against (250 pairs ->
+    500 bind parameters per chunk) and assert the endpoint returns 200
+    with the full delete count, proving the chunk loop ran without
+    overflow.
+    """
+
+    accounts = await _create_accounts()
+    await _set_affinity_ttl(60)
+
+    bulk_count = 600
+    async with SessionLocal() as session:
+        for i in range(bulk_count):
+            await session.execute(
+                text(
+                    """
+                    INSERT INTO sticky_sessions (
+                        key, account_id, kind, provider_kind, routing_subject_id, created_at, updated_at
+                    )
+                    VALUES (
+                        :key, :account_id, :kind, :provider_kind, :routing_subject_id, :timestamp, :timestamp
+                    )
+                    """
+                ),
+                {
+                    "key": f"bulk-delete-{i:04d}",
+                    "account_id": accounts[0].id,
+                    "kind": StickySessionKind.STICKY_THREAD.value,
+                    "provider_kind": "chatgpt_web",
+                    "routing_subject_id": accounts[0].id,
+                    "timestamp": utcnow() - timedelta(seconds=i),
+                },
+            )
+        await session.commit()
+
+    response = await async_client.post(
+        "/api/sticky-sessions/delete-filtered",
+        json={"accountQuery": "sticky-a", "keyQuery": "bulk-delete-"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"deletedCount": bulk_count}
+
+    async with SessionLocal() as session:
+        remaining = (
+            await session.execute(
+                text(
+                    "SELECT COUNT(*) FROM sticky_sessions WHERE key LIKE 'bulk-delete-%'",
+                )
+            )
+        ).scalar_one()
+    assert remaining == 0

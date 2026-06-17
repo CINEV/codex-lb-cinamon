@@ -370,7 +370,7 @@ async def test_run_startup_migrations_drops_accounts_email_unique_with_non_casca
                     """
                     CREATE TABLE request_logs (
                         id INTEGER PRIMARY KEY,
-                        account_id VARCHAR NOT NULL REFERENCES accounts(id),
+                        account_id VARCHAR NOT NULL,
                         request_id VARCHAR NOT NULL,
                         requested_at DATETIME NOT NULL,
                         model VARCHAR NOT NULL,
@@ -382,7 +382,9 @@ async def test_run_startup_migrations_drops_accounts_email_unique_with_non_casca
                         latency_ms INTEGER,
                         status VARCHAR NOT NULL,
                         error_code VARCHAR,
-                        error_message TEXT
+                        error_message TEXT,
+                        CONSTRAINT request_logs_account_id_fkey
+                            FOREIGN KEY(account_id) REFERENCES accounts(id)
                     )
                     """
                 )
@@ -484,19 +486,41 @@ async def test_run_startup_migrations_drops_accounts_email_unique_with_non_casca
             await session.execute(text("PRAGMA foreign_keys=ON"))
             dashboard_columns_rows = (await session.execute(text("PRAGMA table_info(dashboard_settings)"))).fetchall()
             dashboard_columns = {str(row[1]) for row in dashboard_columns_rows if len(row) > 1}
+            account_columns_rows = (await session.execute(text("PRAGMA table_info(accounts)"))).fetchall()
+            account_columns = {str(row[1]) for row in account_columns_rows if len(row) > 1}
             request_log_columns_rows = (await session.execute(text("PRAGMA table_info(request_logs)"))).fetchall()
             request_log_columns = {str(row[1]) for row in request_log_columns_rows if len(row) > 1}
+            assert "deleted_at" in request_log_columns
             assert "transport" in request_log_columns
             assert "plan_type" in request_log_columns
+            assert "source" in request_log_columns
+            assert "limit_warmup_enabled" in account_columns
             legacy_plan_type = (
                 await session.execute(text("SELECT plan_type FROM request_logs WHERE id=1"))
             ).scalar_one()
             assert legacy_plan_type is None
+            assert "limit_warmup_enabled" in dashboard_columns
+            assert "limit_warmup_windows" in dashboard_columns
+            assert "limit_warmup_model" in dashboard_columns
+            assert "limit_warmup_prompt" in dashboard_columns
+            assert "limit_warmup_cooldown_seconds" in dashboard_columns
+            assert "limit_warmup_min_available_percent" in dashboard_columns
+            assert "single_account_id" in dashboard_columns
             if "routing_strategy" in dashboard_columns:
                 routing_strategy = (
                     await session.execute(text("SELECT routing_strategy FROM dashboard_settings WHERE id=1"))
                 ).scalar_one()
                 assert routing_strategy == "capacity_weighted"
+            assert "relative_availability_power" in dashboard_columns
+            relative_availability_power = (
+                await session.execute(text("SELECT relative_availability_power FROM dashboard_settings WHERE id=1"))
+            ).scalar_one()
+            assert relative_availability_power == 2.0
+            assert "relative_availability_top_k" in dashboard_columns
+            relative_availability_top_k = (
+                await session.execute(text("SELECT relative_availability_top_k FROM dashboard_settings WHERE id=1"))
+            ).scalar_one()
+            assert relative_availability_top_k == 5
             assert "openai_cache_affinity_max_age_seconds" in dashboard_columns
             affinity_ttl = (
                 await session.execute(
@@ -522,12 +546,25 @@ async def test_run_startup_migrations_drops_accounts_email_unique_with_non_casca
             ).scalar_one()
             assert gateway_safe_mode in (False, 0)
             assert "sticky_reallocation_budget_threshold_pct" in dashboard_columns
+            assert "sticky_reallocation_primary_budget_threshold_pct" in dashboard_columns
+            assert "sticky_reallocation_secondary_budget_threshold_pct" in dashboard_columns
             sticky_budget_threshold = (
                 await session.execute(
                     text("SELECT sticky_reallocation_budget_threshold_pct FROM dashboard_settings WHERE id=1")
                 )
             ).scalar_one()
             assert sticky_budget_threshold == 95.0
+            sticky_primary_threshold, sticky_secondary_threshold = (
+                await session.execute(
+                    text(
+                        "SELECT sticky_reallocation_primary_budget_threshold_pct, "
+                        "sticky_reallocation_secondary_budget_threshold_pct "
+                        "FROM dashboard_settings WHERE id=1"
+                    )
+                )
+            ).one()
+            assert sticky_primary_threshold == 95.0
+            assert sticky_secondary_threshold == 95.0
             sticky_columns_rows = (await session.execute(text("PRAGMA table_info(sticky_sessions)"))).fetchall()
             sticky_columns = {str(row[1]) for row in sticky_columns_rows if len(row) > 1}
             assert "kind" in sticky_columns
@@ -622,9 +659,29 @@ async def test_run_startup_migrations_drops_accounts_email_unique_with_non_casca
             request_log_index_rows = (await session.execute(text("PRAGMA index_list(request_logs)"))).fetchall()
             request_log_index_names = {str(row[1]) for row in request_log_index_rows if len(row) > 1}
             assert "idx_logs_requested_at_id" in request_log_index_names
+            assert "idx_logs_deleted_at_requested_at_id" in request_log_index_names
             assert "idx_logs_requested_at_model_tier" in request_log_index_names
             assert "idx_logs_model_effort_time" in request_log_index_names
             assert "idx_logs_status_error_time" in request_log_index_names
+            assert "idx_logs_api_key_time" in request_log_index_names
+            assert "idx_logs_source_requested_at" in request_log_index_names
+            warmup_table_exists = (
+                await session.execute(
+                    text("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='account_limit_warmups'")
+                )
+            ).scalar_one()
+            assert warmup_table_exists == 1
+            warmup_index_rows = (await session.execute(text("PRAGMA index_list(account_limit_warmups)"))).fetchall()
+            warmup_index_names = {str(row[1]) for row in warmup_index_rows if len(row) > 1}
+            assert "idx_account_limit_warmups_account_attempted" in warmup_index_names
+            assert "idx_account_limit_warmups_status_attempted" in warmup_index_names
+            request_log_fk_rows = (await session.execute(text("PRAGMA foreign_key_list(request_logs)"))).fetchall()
+            request_log_fk_actions = {
+                (str(row[2]).lower(), str(row[3]).lower(), str(row[4]).lower(), str(row[6]).lower())
+                for row in request_log_fk_rows
+                if len(row) > 6
+            }
+            assert ("accounts", "account_id", "id", "set null") in request_log_fk_actions
             api_key_index_rows = (await session.execute(text("PRAGMA index_list(api_keys)"))).fetchall()
             api_key_index_names = {str(row[1]) for row in api_key_index_rows if len(row) > 1}
             assert "idx_api_keys_name" in api_key_index_names
@@ -659,6 +716,17 @@ async def test_run_startup_migrations_drops_accounts_email_unique_with_non_casca
             assert usage_count == 1
             assert logs_count == 1
             assert sticky_count == 2
+
+            await session.execute(text("DELETE FROM usage_history WHERE account_id='acc_legacy'"))
+            await session.execute(text("DELETE FROM sticky_sessions WHERE account_id='acc_legacy'"))
+            await session.execute(text("DELETE FROM accounts WHERE id='acc_legacy'"))
+            await session.commit()
+
+            remaining_log = (
+                await session.execute(text("SELECT account_id, deleted_at FROM request_logs WHERE id=1"))
+            ).one()
+            assert remaining_log[0] is None
+            assert remaining_log[1] is None
     finally:
         await engine.dispose()
 
@@ -865,3 +933,79 @@ async def test_dashboard_settings_default_flip_migration_updates_pristine_fresh_
             assert row[1] in (True, 1)
     finally:
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_free_account_monthly_migration_renames_only_free_usage_windows(tmp_path):
+    db_url = f"sqlite+aiosqlite:///{tmp_path / 'free-monthly-migration.sqlite'}"
+
+    await to_thread.run_sync(
+        lambda: run_upgrade(
+            db_url,
+            "20260604_000000_add_reauth_required_account_status",
+            bootstrap_legacy=True,
+        )
+    )
+
+    engine = create_async_engine(db_url, future=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with session_factory() as session:
+            await session.execute(
+                text(
+                    """
+                    INSERT INTO accounts (
+                        id, email, plan_type,
+                        access_token_encrypted, refresh_token_encrypted, id_token_encrypted,
+                        last_refresh, status
+                    )
+                    VALUES
+                      ('acc_free_monthly_migration', 'free-monthly@example.com', 'free',
+                       x'01', x'02', x'03', '2026-01-01 00:00:00', 'active'),
+                      ('acc_paid_monthly_migration', 'paid-monthly@example.com', 'plus',
+                       x'04', x'05', x'06', '2026-01-01 00:00:00', 'active')
+                    """
+                )
+            )
+            await session.execute(
+                text(
+                    """
+                    INSERT INTO usage_history (account_id, recorded_at, window, used_percent)
+                    VALUES
+                      ('acc_free_monthly_migration', CURRENT_TIMESTAMP, 'primary', 10.0),
+                      ('acc_free_monthly_migration', CURRENT_TIMESTAMP, 'secondary', 20.0),
+                      ('acc_free_monthly_migration', CURRENT_TIMESTAMP, NULL, 25.0),
+                      ('acc_paid_monthly_migration', CURRENT_TIMESTAMP, 'primary', 30.0),
+                      ('acc_paid_monthly_migration', CURRENT_TIMESTAMP, 'secondary', 40.0),
+                      ('acc_paid_monthly_migration', CURRENT_TIMESTAMP, NULL, 45.0)
+                    """
+                )
+            )
+            await session.commit()
+
+        await to_thread.run_sync(lambda: run_upgrade(db_url, "head", bootstrap_legacy=False))
+
+        async with session_factory() as session:
+            free_windows = [
+                row[0]
+                for row in (
+                    await session.execute(
+                        text("SELECT window FROM usage_history WHERE account_id = :account_id ORDER BY id"),
+                        {"account_id": "acc_free_monthly_migration"},
+                    )
+                ).all()
+            ]
+            paid_windows = [
+                row[0]
+                for row in (
+                    await session.execute(
+                        text("SELECT window FROM usage_history WHERE account_id = :account_id ORDER BY id"),
+                        {"account_id": "acc_paid_monthly_migration"},
+                    )
+                ).all()
+            ]
+    finally:
+        await engine.dispose()
+
+    assert free_windows == ["old-primary", "old-secondary", "old-primary"]
+    assert paid_windows == ["primary", "secondary", None]

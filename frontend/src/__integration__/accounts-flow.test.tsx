@@ -33,6 +33,36 @@ describe("accounts flow integration", () => {
     }
   });
 
+  it("lets operators set, search, and clear an account alias", async () => {
+    const user = userEvent.setup({ delay: null });
+
+    window.history.pushState({}, "", "/accounts");
+    renderWithProviders(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Accounts" })).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "Edit alias" }));
+    const aliasInput = await screen.findByLabelText("Account alias");
+    await user.clear(aliasInput);
+    await user.type(aliasInput, "Personal Plus");
+    await user.click(screen.getByRole("button", { name: "Save alias" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Personal Plus" })).toBeInTheDocument();
+    });
+
+    await user.type(screen.getByPlaceholderText("Search accounts..."), "personal");
+    expect(screen.getAllByText("Personal Plus").length).toBeGreaterThan(0);
+    expect(screen.queryByText("secondary@example.com")).not.toBeInTheDocument();
+
+    await user.click(await screen.findByRole("button", { name: "Edit alias" }));
+    const aliasInputToClear = await screen.findByLabelText("Account alias");
+    await user.clear(aliasInputToClear);
+    await user.click(screen.getByRole("button", { name: "Save alias" }));
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "primary@example.com" })).toBeInTheDocument();
+    });
+  });
+
   it("supports editing a platform fallback identity", async () => {
     const user = userEvent.setup({ delay: null });
 
@@ -42,7 +72,7 @@ describe("accounts flow integration", () => {
     expect(await screen.findByRole("heading", { name: "Accounts" })).toBeInTheDocument();
     expect((await screen.findAllByText("primary@example.com")).length).toBeGreaterThan(0);
 
-    await user.click(screen.getByRole("button", { name: /Add API/i }));
+    await user.click(screen.getByRole("button", { name: "Add API key" }));
     await user.type(screen.getByLabelText("Label"), "Platform Initial");
     await user.type(screen.getByLabelText("API key"), "sk-platform-test");
     await user.click(screen.getByRole("button", { name: "Add API key" }));

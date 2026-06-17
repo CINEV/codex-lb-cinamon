@@ -1,0 +1,301 @@
+0ade7a0d7daab704b782bf98f6d5178d2cadc503
+.dockerignore
+.github/release-please-manifest.json
+.github/workflows/ci.yml
+.github/workflows/release.yml
+CHANGELOG.md
+Dockerfile
+README.md
+app/__init__.py
+app/cli.py
+app/core/auth/dependencies.py
+app/core/clients/proxy.py
+app/core/openai/chat_requests.py
+app/core/runtime_logging.py
+app/db/alembic/revision_ids.py
+app/db/models.py
+app/dependencies.py
+app/main.py
+app/modules/accounts/api.py
+app/modules/accounts/mappers.py
+app/modules/accounts/repository.py
+app/modules/accounts/schemas.py
+app/modules/accounts/service.py
+app/modules/dashboard_auth/api.py
+app/modules/proxy/api.py
+app/modules/proxy/load_balancer.py
+app/modules/proxy/repo_bundle.py
+app/modules/proxy/service.py
+app/modules/proxy/sticky_repository.py
+app/modules/request_logs/repository.py
+app/modules/sticky_sessions/api.py
+deploy/helm/codex-lb/Chart.yaml
+frontend/bun.lock
+frontend/package.json
+frontend/src/__integration__/accounts-flow.test.tsx
+frontend/src/features/accounts/api.ts
+frontend/src/features/accounts/components/account-actions.test.tsx
+frontend/src/features/accounts/components/account-actions.tsx
+frontend/src/features/accounts/components/account-detail.tsx
+frontend/src/features/accounts/components/account-list-item.test.tsx
+frontend/src/features/accounts/components/account-list-item.tsx
+frontend/src/features/accounts/components/account-list.test.tsx
+frontend/src/features/accounts/components/account-list.tsx
+frontend/src/features/accounts/components/accounts-page.tsx
+frontend/src/features/accounts/hooks/use-accounts.test.ts
+frontend/src/features/accounts/hooks/use-accounts.ts
+frontend/src/features/accounts/schemas.test.ts
+frontend/src/features/accounts/schemas.ts
+frontend/src/features/api-keys/components/account-multi-select.tsx
+frontend/src/features/dashboard/components/account-card.test.tsx
+frontend/src/features/dashboard/components/account-card.tsx
+frontend/src/features/dashboard/components/recent-requests-table.test.tsx
+frontend/src/features/dashboard/components/recent-requests-table.tsx
+frontend/src/features/dashboard/schemas.test.ts
+frontend/src/features/dashboard/schemas.ts
+frontend/src/features/dashboard/utils.test.ts
+frontend/src/features/dashboard/utils.ts
+frontend/src/features/sticky-sessions/components/sticky-sessions-section.tsx
+frontend/src/features/sticky-sessions/schemas.ts
+frontend/src/test/mocks/factories.ts
+frontend/src/test/mocks/handler-coverage.test.ts
+frontend/src/test/mocks/handlers.ts
+frontend/src/test/setup.ts
+openspec/changes/archive/2026-05-17-repair-token-cache-affinity-routing/specs/responses-api-compat/spec.md
+openspec/specs/admin-auth/spec.md
+openspec/specs/api-keys/spec.md
+openspec/specs/database-migrations/spec.md
+openspec/specs/proxy-runtime-observability/spec.md
+openspec/specs/responses-api-compat/spec.md
+openspec/specs/sticky-session-operations/spec.md
+pyproject.toml
+tests/integration/test_accounts_api.py
+tests/integration/test_auth_middleware.py
+tests/integration/test_cache_locality_fix.py
+tests/integration/test_openai_compat_features.py
+tests/integration/test_proxy_chat_completions.py
+tests/integration/test_request_logs_api.py
+tests/integration/test_sticky_sessions_api.py
+tests/unit/test_cli.py
+tests/unit/test_db_migrate.py
+tests/unit/test_graceful_degradation.py
+tests/unit/test_k8s_version_policy.py
+tests/unit/test_load_balancer.py
+tests/unit/test_proxy_http_bridge.py
+tests/unit/test_proxy_utils.py
+tests/unit/test_request_logs_repository.py
+tests/unit/test_select_with_stickiness.py
+uv.lock
+
+Auto-merging .dockerignore
+CONFLICT (content): Merge conflict in .dockerignore
+Auto-merging .github/release-please-manifest.json
+CONFLICT (content): Merge conflict in .github/release-please-manifest.json
+Auto-merging .github/workflows/ci.yml
+CONFLICT (content): Merge conflict in .github/workflows/ci.yml
+Auto-merging .github/workflows/release.yml
+CONFLICT (content): Merge conflict in .github/workflows/release.yml
+Auto-merging AGENTS.md
+Auto-merging CHANGELOG.md
+CONFLICT (content): Merge conflict in CHANGELOG.md
+Auto-merging Dockerfile
+CONFLICT (content): Merge conflict in Dockerfile
+Auto-merging README.md
+CONFLICT (content): Merge conflict in README.md
+Auto-merging app/__init__.py
+CONFLICT (content): Merge conflict in app/__init__.py
+Auto-merging app/cli.py
+CONFLICT (content): Merge conflict in app/cli.py
+Auto-merging app/core/auth/dependencies.py
+CONFLICT (content): Merge conflict in app/core/auth/dependencies.py
+Auto-merging app/core/clients/proxy.py
+CONFLICT (content): Merge conflict in app/core/clients/proxy.py
+Auto-merging app/core/config/settings.py
+Auto-merging app/core/openai/chat_requests.py
+CONFLICT (content): Merge conflict in app/core/openai/chat_requests.py
+Auto-merging app/core/openai/requests.py
+Auto-merging app/core/runtime_logging.py
+CONFLICT (content): Merge conflict in app/core/runtime_logging.py
+Auto-merging app/db/alembic/revision_ids.py
+CONFLICT (content): Merge conflict in app/db/alembic/revision_ids.py
+Auto-merging app/db/migrate.py
+Auto-merging app/db/models.py
+CONFLICT (content): Merge conflict in app/db/models.py
+Auto-merging app/dependencies.py
+CONFLICT (content): Merge conflict in app/dependencies.py
+Auto-merging app/main.py
+CONFLICT (content): Merge conflict in app/main.py
+Auto-merging app/modules/accounts/api.py
+CONFLICT (content): Merge conflict in app/modules/accounts/api.py
+Auto-merging app/modules/accounts/mappers.py
+CONFLICT (content): Merge conflict in app/modules/accounts/mappers.py
+Auto-merging app/modules/accounts/repository.py
+CONFLICT (content): Merge conflict in app/modules/accounts/repository.py
+Auto-merging app/modules/accounts/schemas.py
+CONFLICT (content): Merge conflict in app/modules/accounts/schemas.py
+Auto-merging app/modules/accounts/service.py
+CONFLICT (content): Merge conflict in app/modules/accounts/service.py
+Auto-merging app/modules/dashboard_auth/api.py
+CONFLICT (content): Merge conflict in app/modules/dashboard_auth/api.py
+Auto-merging app/modules/proxy/api.py
+CONFLICT (content): Merge conflict in app/modules/proxy/api.py
+Auto-merging app/modules/proxy/durable_bridge_coordinator.py
+Auto-merging app/modules/proxy/load_balancer.py
+CONFLICT (content): Merge conflict in app/modules/proxy/load_balancer.py
+Auto-merging app/modules/proxy/repo_bundle.py
+CONFLICT (content): Merge conflict in app/modules/proxy/repo_bundle.py
+Auto-merging app/modules/proxy/service.py
+CONFLICT (content): Merge conflict in app/modules/proxy/service.py
+Auto-merging app/modules/proxy/sticky_repository.py
+CONFLICT (content): Merge conflict in app/modules/proxy/sticky_repository.py
+Auto-merging app/modules/request_logs/mappers.py
+Auto-merging app/modules/request_logs/repository.py
+CONFLICT (content): Merge conflict in app/modules/request_logs/repository.py
+Auto-merging app/modules/request_logs/schemas.py
+Auto-merging app/modules/sticky_sessions/api.py
+CONFLICT (content): Merge conflict in app/modules/sticky_sessions/api.py
+Auto-merging deploy/helm/codex-lb/Chart.yaml
+CONFLICT (content): Merge conflict in deploy/helm/codex-lb/Chart.yaml
+Auto-merging frontend/bun.lock
+CONFLICT (content): Merge conflict in frontend/bun.lock
+Auto-merging frontend/package.json
+CONFLICT (content): Merge conflict in frontend/package.json
+Auto-merging frontend/src/__integration__/accounts-flow.test.tsx
+CONFLICT (content): Merge conflict in frontend/src/__integration__/accounts-flow.test.tsx
+Auto-merging frontend/src/features/accounts/api.ts
+CONFLICT (content): Merge conflict in frontend/src/features/accounts/api.ts
+Auto-merging frontend/src/features/accounts/components/account-actions.test.tsx
+CONFLICT (add/add): Merge conflict in frontend/src/features/accounts/components/account-actions.test.tsx
+Auto-merging frontend/src/features/accounts/components/account-actions.tsx
+CONFLICT (content): Merge conflict in frontend/src/features/accounts/components/account-actions.tsx
+Auto-merging frontend/src/features/accounts/components/account-detail.tsx
+CONFLICT (content): Merge conflict in frontend/src/features/accounts/components/account-detail.tsx
+Auto-merging frontend/src/features/accounts/components/account-list-item.test.tsx
+CONFLICT (content): Merge conflict in frontend/src/features/accounts/components/account-list-item.test.tsx
+Auto-merging frontend/src/features/accounts/components/account-list-item.tsx
+CONFLICT (content): Merge conflict in frontend/src/features/accounts/components/account-list-item.tsx
+Auto-merging frontend/src/features/accounts/components/account-list.test.tsx
+CONFLICT (content): Merge conflict in frontend/src/features/accounts/components/account-list.test.tsx
+Auto-merging frontend/src/features/accounts/components/account-list.tsx
+CONFLICT (content): Merge conflict in frontend/src/features/accounts/components/account-list.tsx
+Auto-merging frontend/src/features/accounts/components/accounts-page.tsx
+CONFLICT (content): Merge conflict in frontend/src/features/accounts/components/accounts-page.tsx
+Auto-merging frontend/src/features/accounts/components/oauth-dialog.tsx
+Auto-merging frontend/src/features/accounts/hooks/use-accounts.test.ts
+CONFLICT (content): Merge conflict in frontend/src/features/accounts/hooks/use-accounts.test.ts
+Auto-merging frontend/src/features/accounts/hooks/use-accounts.ts
+CONFLICT (content): Merge conflict in frontend/src/features/accounts/hooks/use-accounts.ts
+Auto-merging frontend/src/features/accounts/schemas.test.ts
+CONFLICT (content): Merge conflict in frontend/src/features/accounts/schemas.test.ts
+Auto-merging frontend/src/features/accounts/schemas.ts
+CONFLICT (content): Merge conflict in frontend/src/features/accounts/schemas.ts
+Auto-merging frontend/src/features/api-keys/components/account-multi-select.tsx
+CONFLICT (content): Merge conflict in frontend/src/features/api-keys/components/account-multi-select.tsx
+Auto-merging frontend/src/features/api-keys/components/api-key-create-dialog.tsx
+Auto-merging frontend/src/features/api-keys/components/api-key-edit-dialog.tsx
+Auto-merging frontend/src/features/api-keys/schemas.ts
+Auto-merging frontend/src/features/apis/schemas.ts
+Auto-merging frontend/src/features/auth/schemas.ts
+Auto-merging frontend/src/features/dashboard/components/account-card.test.tsx
+CONFLICT (content): Merge conflict in frontend/src/features/dashboard/components/account-card.test.tsx
+Auto-merging frontend/src/features/dashboard/components/account-card.tsx
+CONFLICT (content): Merge conflict in frontend/src/features/dashboard/components/account-card.tsx
+Auto-merging frontend/src/features/dashboard/components/recent-requests-table.test.tsx
+CONFLICT (content): Merge conflict in frontend/src/features/dashboard/components/recent-requests-table.test.tsx
+Auto-merging frontend/src/features/dashboard/components/recent-requests-table.tsx
+CONFLICT (content): Merge conflict in frontend/src/features/dashboard/components/recent-requests-table.tsx
+Auto-merging frontend/src/features/dashboard/schemas.test.ts
+CONFLICT (content): Merge conflict in frontend/src/features/dashboard/schemas.test.ts
+Auto-merging frontend/src/features/dashboard/schemas.ts
+CONFLICT (content): Merge conflict in frontend/src/features/dashboard/schemas.ts
+Auto-merging frontend/src/features/dashboard/utils.test.ts
+CONFLICT (content): Merge conflict in frontend/src/features/dashboard/utils.test.ts
+Auto-merging frontend/src/features/dashboard/utils.ts
+CONFLICT (content): Merge conflict in frontend/src/features/dashboard/utils.ts
+Auto-merging frontend/src/features/firewall/schemas.ts
+Auto-merging frontend/src/features/settings/components/totp-settings.tsx
+Auto-merging frontend/src/features/settings/schemas.ts
+Auto-merging frontend/src/features/sticky-sessions/components/sticky-sessions-section.tsx
+CONFLICT (content): Merge conflict in frontend/src/features/sticky-sessions/components/sticky-sessions-section.tsx
+Auto-merging frontend/src/features/sticky-sessions/hooks/use-sticky-sessions.ts
+Auto-merging frontend/src/features/sticky-sessions/schemas.ts
+CONFLICT (content): Merge conflict in frontend/src/features/sticky-sessions/schemas.ts
+Auto-merging frontend/src/lib/api-client.ts
+Auto-merging frontend/src/schemas/api.ts
+Auto-merging frontend/src/test/mocks/factories.ts
+CONFLICT (content): Merge conflict in frontend/src/test/mocks/factories.ts
+Auto-merging frontend/src/test/mocks/handler-coverage.test.ts
+CONFLICT (content): Merge conflict in frontend/src/test/mocks/handler-coverage.test.ts
+Auto-merging frontend/src/test/mocks/handlers.ts
+CONFLICT (content): Merge conflict in frontend/src/test/mocks/handlers.ts
+Auto-merging frontend/src/test/setup.ts
+CONFLICT (content): Merge conflict in frontend/src/test/setup.ts
+Auto-merging frontend/src/utils/formatters.ts
+Auto-merging openspec/changes/archive/2026-05-17-repair-token-cache-affinity-routing/specs/proxy-runtime-observability/spec.md
+Auto-merging openspec/changes/archive/2026-05-17-repair-token-cache-affinity-routing/specs/responses-api-compat/spec.md
+CONFLICT (content): Merge conflict in openspec/changes/archive/2026-05-17-repair-token-cache-affinity-routing/specs/responses-api-compat/spec.md
+Auto-merging openspec/specs/admin-auth/spec.md
+CONFLICT (content): Merge conflict in openspec/specs/admin-auth/spec.md
+Auto-merging openspec/specs/api-keys/spec.md
+CONFLICT (content): Merge conflict in openspec/specs/api-keys/spec.md
+Auto-merging openspec/specs/database-migrations/spec.md
+CONFLICT (content): Merge conflict in openspec/specs/database-migrations/spec.md
+Auto-merging openspec/specs/deployment-installation/spec.md
+Auto-merging openspec/specs/proxy-runtime-observability/spec.md
+CONFLICT (content): Merge conflict in openspec/specs/proxy-runtime-observability/spec.md
+Auto-merging openspec/specs/responses-api-compat/context.md
+Auto-merging openspec/specs/responses-api-compat/spec.md
+CONFLICT (content): Merge conflict in openspec/specs/responses-api-compat/spec.md
+Auto-merging openspec/specs/sticky-session-operations/spec.md
+CONFLICT (content): Merge conflict in openspec/specs/sticky-session-operations/spec.md
+Auto-merging pyproject.toml
+CONFLICT (content): Merge conflict in pyproject.toml
+Auto-merging tests/conftest.py
+Auto-merging tests/integration/test_accounts_api.py
+CONFLICT (content): Merge conflict in tests/integration/test_accounts_api.py
+Auto-merging tests/integration/test_auth_middleware.py
+CONFLICT (content): Merge conflict in tests/integration/test_auth_middleware.py
+Auto-merging tests/integration/test_cache_locality_fix.py
+CONFLICT (content): Merge conflict in tests/integration/test_cache_locality_fix.py
+Auto-merging tests/integration/test_http_responses_bridge.py
+Auto-merging tests/integration/test_migrations.py
+Auto-merging tests/integration/test_openai_compat_features.py
+CONFLICT (content): Merge conflict in tests/integration/test_openai_compat_features.py
+Auto-merging tests/integration/test_proxy_chat_completions.py
+CONFLICT (content): Merge conflict in tests/integration/test_proxy_chat_completions.py
+Auto-merging tests/integration/test_proxy_compact.py
+Auto-merging tests/integration/test_proxy_responses.py
+Auto-merging tests/integration/test_proxy_transcriptions.py
+Auto-merging tests/integration/test_proxy_websocket_responses.py
+Auto-merging tests/integration/test_request_logs_api.py
+CONFLICT (content): Merge conflict in tests/integration/test_request_logs_api.py
+Auto-merging tests/integration/test_sticky_sessions_api.py
+CONFLICT (content): Merge conflict in tests/integration/test_sticky_sessions_api.py
+Auto-merging tests/integration/test_v1_models.py
+Auto-merging tests/unit/test_bridge_context_blowup.py
+Auto-merging tests/unit/test_cli.py
+CONFLICT (content): Merge conflict in tests/unit/test_cli.py
+Auto-merging tests/unit/test_db_migrate.py
+CONFLICT (content): Merge conflict in tests/unit/test_db_migrate.py
+Auto-merging tests/unit/test_durable_bridge_sessions.py
+Auto-merging tests/unit/test_graceful_degradation.py
+CONFLICT (content): Merge conflict in tests/unit/test_graceful_degradation.py
+Auto-merging tests/unit/test_input_image_proxy.py
+CONFLICT (modify/delete): tests/unit/test_k8s_version_policy.py deleted in HEAD and modified in v1.20.0.  Version v1.20.0 of tests/unit/test_k8s_version_policy.py left in tree.
+Auto-merging tests/unit/test_load_balancer.py
+CONFLICT (content): Merge conflict in tests/unit/test_load_balancer.py
+Auto-merging tests/unit/test_openai_requests.py
+Auto-merging tests/unit/test_otel.py
+Auto-merging tests/unit/test_proxy_api_websocket_auth.py
+Auto-merging tests/unit/test_proxy_http_bridge.py
+CONFLICT (content): Merge conflict in tests/unit/test_proxy_http_bridge.py
+Auto-merging tests/unit/test_proxy_load_balancer_refresh.py
+Auto-merging tests/unit/test_proxy_utils.py
+CONFLICT (content): Merge conflict in tests/unit/test_proxy_utils.py
+Auto-merging tests/unit/test_request_locality.py
+Auto-merging tests/unit/test_request_logs_repository.py
+CONFLICT (content): Merge conflict in tests/unit/test_request_logs_repository.py
+Auto-merging tests/unit/test_select_with_stickiness.py
+CONFLICT (content): Merge conflict in tests/unit/test_select_with_stickiness.py
+Auto-merging uv.lock
+CONFLICT (content): Merge conflict in uv.lock

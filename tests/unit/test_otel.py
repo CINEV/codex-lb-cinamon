@@ -514,7 +514,7 @@ async def test_lifespan_shutdown_fails_bridge_capacity_waiter_and_cancels_usage_
             )
             service._http_bridge_inflight_sessions[inflight_key] = inflight_future
 
-            monkeypatch.setattr(service, "_prune_http_bridge_sessions_locked", AsyncMock())
+            monkeypatch.setattr(service, "_prune_http_bridge_sessions_locked", Mock(return_value=[]))
             monkeypatch.setattr(service, "_http_bridge_pending_count", AsyncMock(return_value=1))
             monkeypatch.setattr(
                 proxy_module,
@@ -528,7 +528,7 @@ async def test_lifespan_shutdown_fails_bridge_capacity_waiter_and_cancels_usage_
                 AsyncMock(return_value=("pod-a", ("pod-a",))),
             )
             create_http_bridge_session = AsyncMock()
-            monkeypatch.setattr(service, "_create_http_bridge_session_compatible", create_http_bridge_session)
+            monkeypatch.setattr(service, "_create_http_bridge_session", create_http_bridge_session)
             monkeypatch.setattr(service, "_claim_durable_http_bridge_session", AsyncMock())
             monkeypatch.setattr(service, "_close_http_bridge_session", AsyncMock())
 

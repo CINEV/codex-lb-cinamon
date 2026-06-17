@@ -1,9 +1,11 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { HttpResponse, http } from "msw";
 import { describe, expect, it, vi } from "vitest";
 
 import type { LimitRuleCreate } from "@/features/api-keys/schemas";
-import { createApiKey } from "@/test/mocks/factories";
+import { createAccountSummary, createApiKey } from "@/test/mocks/factories";
+import { server } from "@/test/mocks/server";
 import { renderWithProviders } from "@/test/utils";
 
 import { ApiKeyEditDialog } from "./api-key-edit-dialog";
@@ -36,6 +38,7 @@ describe("ApiKeyEditDialog", () => {
 
     const payload = onSubmit.mock.calls[0][0];
     expect(payload.name).toBe("Renamed key");
+    expect(payload.applyToCodexModel).toBe(false);
     expect("assignedAccountIds" in payload).toBe(false);
     expect("limits" in payload).toBe(false);
   });
@@ -137,6 +140,20 @@ describe("ApiKeyEditDialog", () => {
   it("submits selected assigned accounts", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue(undefined);
+    server.use(
+      http.get("/api/accounts", () =>
+        HttpResponse.json({
+          accounts: [
+            createAccountSummary(),
+            createAccountSummary({
+              accountId: "acc_secondary",
+              email: "secondary@example.com",
+              displayName: "secondary@example.com",
+            }),
+          ],
+        }),
+      ),
+    );
 
     renderWithProviders(
       <ApiKeyEditDialog
@@ -246,6 +263,84 @@ describe("ApiKeyEditDialog", () => {
     const payload = onSubmit.mock.calls[0][0];
     expect(payload.name).toBe("Renamed key");
     expect(payload.assignedAccountIds).toEqual([]);
+  });
+
+  it("submits the codex /model checkbox value", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+
+    renderWithProviders(
+      <ApiKeyEditDialog
+        open
+        busy={false}
+        apiKey={createApiKey()}
+        onOpenChange={vi.fn()}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    await user.click(screen.getByRole("checkbox", { name: "Apply to codex /model" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+
+    expect(onSubmit.mock.calls[0][0].applyToCodexModel).toBe(true);
+  });
+
+  it("shows the stored codex /model checkbox value", () => {
+    renderWithProviders(
+      <ApiKeyEditDialog
+        open
+        busy={false}
+        apiKey={createApiKey({ applyToCodexModel: true })}
+        onOpenChange={vi.fn()}
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("checkbox", { name: "Apply to codex /model" })).toBeChecked();
+  });
+
+  it("submits opportunistic traffic class", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+
+    renderWithProviders(
+      <ApiKeyEditDialog
+        open
+        busy={false}
+        apiKey={createApiKey()}
+        onOpenChange={vi.fn()}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox", { name: /traffic class/i }));
+    await user.click(await screen.findByRole("option", { name: /opportunistic/i }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+
+    expect(onSubmit.mock.calls[0][0].trafficClass).toBe("opportunistic");
+  });
+
+  it("shows the stored traffic class value", () => {
+    renderWithProviders(
+      <ApiKeyEditDialog
+        open
+        busy={false}
+        apiKey={createApiKey({ trafficClass: "opportunistic" })}
+        onOpenChange={vi.fn()}
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    const trafficClassSelect = screen.getByRole("combobox", { name: /traffic class/i });
+    expect(trafficClassSelect).toHaveTextContent("Opportunistic");
   });
 });
 

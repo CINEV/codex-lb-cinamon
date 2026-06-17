@@ -9,6 +9,8 @@ import type {
 	ApiKeyCreateRequest,
 	ApiKeyUpdateRequest,
 } from "@/features/api-keys/schemas";
+import { ApiKeyCreatedDialog } from "@/features/api-keys/components/api-key-created-dialog";
+import { ApiKeysOverview } from "@/features/api-keys/components/api-keys-overview";
 import { ApiDetail } from "@/features/apis/components/api-detail";
 import { ApiList } from "@/features/apis/components/api-list";
 import { ApisSkeleton } from "@/features/apis/components/apis-skeleton";
@@ -28,11 +30,6 @@ const ApiKeyCreateDialog = lazy(() =>
 const ApiKeyEditDialog = lazy(() =>
 	import("@/features/api-keys/components/api-key-edit-dialog").then((m) => ({
 		default: m.ApiKeyEditDialog,
-	})),
-);
-const ApiKeyCreatedDialog = lazy(() =>
-	import("@/features/api-keys/components/api-key-created-dialog").then((m) => ({
-		default: m.ApiKeyCreatedDialog,
 	})),
 );
 
@@ -139,42 +136,46 @@ export function ApisPage() {
 					</Button>
 				</div>
 			) : (
-				<div className="grid gap-4 lg:grid-cols-[22rem_minmax(0,1fr)]">
-					<div className="rounded-xl border bg-card p-4">
-						<ApiList
-							apiKeys={apiKeys}
-							selectedKeyId={resolvedSelectedKeyId}
-							onSelect={handleSelectKey}
-							onOpenCreate={() => createDialog.show()}
+				<div className="space-y-6">
+					<ApiKeysOverview apiKeys={apiKeys} />
+
+					<div className="grid gap-4 lg:grid-cols-[22rem_minmax(0,1fr)]">
+						<div className="rounded-xl border bg-card p-4">
+							<ApiList
+								apiKeys={apiKeys}
+								selectedKeyId={resolvedSelectedKeyId}
+								onSelect={handleSelectKey}
+								onOpenCreate={() => createDialog.show()}
+							/>
+						</div>
+
+						<ApiDetail
+							apiKey={selectedApiKey}
+							trends={trendsQuery.data}
+							usage7Day={usage7DayQuery.data}
+							usage7DayLoading={usage7DayQuery.isPending}
+							usage7DayError={usage7DayError}
+							busy={mutationBusy}
+							onEdit={(apiKey) => editDialog.show(apiKey)}
+							onToggleActive={(apiKey) => {
+								void updateMutation
+									.mutateAsync({
+										keyId: apiKey.id,
+										payload: { isActive: !apiKey.isActive },
+									})
+									.catch(() => null);
+							}}
+							onDelete={(apiKey) => deleteDialog.show(apiKey)}
+							onRegenerate={(apiKey) => {
+								void regenerateMutation
+									.mutateAsync(apiKey.id)
+									.then((result) => {
+										createdDialog.show(result.key);
+									})
+									.catch(() => null);
+							}}
 						/>
 					</div>
-
-					<ApiDetail
-						apiKey={selectedApiKey}
-						trends={trendsQuery.data}
-						usage7Day={usage7DayQuery.data}
-						usage7DayLoading={usage7DayQuery.isPending}
-						usage7DayError={usage7DayError}
-						busy={mutationBusy}
-						onEdit={(apiKey) => editDialog.show(apiKey)}
-						onToggleActive={(apiKey) => {
-							void updateMutation
-								.mutateAsync({
-									keyId: apiKey.id,
-									payload: { isActive: !apiKey.isActive },
-								})
-								.catch(() => null);
-						}}
-						onDelete={(apiKey) => deleteDialog.show(apiKey)}
-						onRegenerate={(apiKey) => {
-							void regenerateMutation
-								.mutateAsync(apiKey.id)
-								.then((result) => {
-									createdDialog.show(result.key);
-								})
-								.catch(() => null);
-						}}
-					/>
 				</div>
 			)}
 
@@ -193,13 +194,13 @@ export function ApisPage() {
 					onOpenChange={editDialog.onOpenChange}
 					onSubmit={handleUpdate}
 				/>
-
-				<ApiKeyCreatedDialog
-					open={createdDialog.open}
-					apiKey={createdDialog.data}
-					onOpenChange={createdDialog.onOpenChange}
-				/>
 			</Suspense>
+
+			<ApiKeyCreatedDialog
+				open={createdDialog.open}
+				apiKey={createdDialog.data}
+				onOpenChange={createdDialog.onOpenChange}
+			/>
 
 			<ConfirmDialog
 				open={deleteDialog.open}

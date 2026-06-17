@@ -24,6 +24,7 @@ class ServeOptions:
     port: int
     ssl_certfile: str | None
     ssl_keyfile: str | None
+    timeout_keep_alive: int = 7200
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +62,7 @@ def build_serve_command(python_executable: str, options: ServeOptions) -> list[s
         command.extend(["--ssl-certfile", options.ssl_certfile])
     if options.ssl_keyfile:
         command.extend(["--ssl-keyfile", options.ssl_keyfile])
+    command.extend(["--timeout-keep-alive", str(options.timeout_keep_alive)])
     return command
 
 

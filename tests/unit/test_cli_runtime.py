@@ -30,6 +30,8 @@ def test_build_serve_command_includes_explicit_serve_subcommand() -> None:
         "cert.pem",
         "--ssl-keyfile",
         "key.pem",
+        "--timeout-keep-alive",
+        "7200",
     ]
 
 
@@ -88,6 +90,8 @@ def test_start_background_server_writes_runtime_metadata(monkeypatch, tmp_path: 
         "127.0.0.1",
         "--port",
         "2455",
+        "--timeout-keep-alive",
+        "7200",
     ]
 
 

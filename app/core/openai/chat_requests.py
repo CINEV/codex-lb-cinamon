@@ -20,6 +20,7 @@ from app.core.types import JsonValue
 from app.core.utils.json_guards import is_json_list, is_json_mapping
 
 _SUPPORTED_CHAT_ROLES = frozenset({"system", "developer", "user", "assistant", "tool"})
+_TEXT_CONTENT_PART_TYPES = frozenset({"text", "input_text", "output_text"})
 
 
 def _content_parts(content: JsonValue) -> list[JsonValue]:
@@ -46,7 +47,9 @@ class ChatCompletionsRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     model: str = Field(min_length=1)
-    messages: list[OpenAIMessage]
+    messages: list[OpenAIMessage] | None = None
+    input: JsonValue | None = None
+    instructions: str | None = None
     tools: list[JsonValue] = Field(default_factory=list)
     tool_choice: str | dict[str, JsonValue] | None = None
     parallel_tool_calls: bool | None = None
@@ -70,11 +73,13 @@ class ChatCompletionsRequest(BaseModel):
     @field_validator("tools")
     @classmethod
     def _validate_tools(cls, value: list[JsonValue]) -> list[JsonValue]:
-        return validate_tool_types(value, unsupported_tool_types=CHAT_UNSUPPORTED_TOOL_TYPES)
+        return validate_tool_types(value)
 
     @field_validator("messages")
     @classmethod
-    def _reject_file_id(cls, value: list[OpenAIMessage]) -> list[OpenAIMessage]:
+    def _reject_file_id(cls, value: list[OpenAIMessage] | None) -> list[OpenAIMessage] | None:
+        if value is None:
+            return value
         for message in value:
             message_mapping = _json_mapping(message)
             if message_mapping is None:
@@ -99,7 +104,9 @@ class ChatCompletionsRequest(BaseModel):
     @model_validator(mode="after")
     def _validate_messages(self) -> "ChatCompletionsRequest":
         if not self.messages:
-            raise ValueError("'messages' must be a non-empty list.")
+            if self.input is not None:
+                return self
+            raise ValueError("Provide either 'messages' or 'input'.")
         for message in self.messages:
             if not is_json_mapping(message):
                 raise ValueError("'messages' must contain objects.")
@@ -120,19 +127,29 @@ class ChatCompletionsRequest(BaseModel):
                 _validate_tool_message(message)
         return self
 
+    @model_validator(mode="after")
+    def _validate_tools(self) -> "ChatCompletionsRequest":
+        responses_shaped_payload = not self.messages and self.input is not None
+        self.tools = validate_tool_types(
+            self.tools,
+            unsupported_tool_types=CHAT_UNSUPPORTED_TOOL_TYPES,
+            allow_builtin_tools=responses_shaped_payload,
+        )
+        return self
+
     def to_responses_request(self) -> ResponsesRequest:
         data = self.model_dump(mode="json", exclude_none=True)
-        messages = data.pop("messages")
-        messages = _sanitize_user_messages(messages)
+        messages = data.pop("messages", None)
         data.pop("store", None)
         data.pop("n", None)
         data.pop("max_tokens", None)
         data.pop("max_completion_tokens", None)
         response_format = data.pop("response_format", None)
         stream_options = data.pop("stream_options", None)
-        tools = _normalize_chat_tools(data.pop("tools", []))
-        tool_choice = _normalize_tool_choice(data.pop("tool_choice", None))
+        raw_tools = data.pop("tools", [])
+        raw_tool_choice = data.pop("tool_choice", None)
         reasoning_effort = data.pop("reasoning_effort", None)
+        preserve_instruction_roles = _is_json_object_response_format(response_format)
         if reasoning_effort is not None and "reasoning" not in data:
             data["reasoning"] = {"effort": reasoning_effort}
         normalize_reasoning_aliases(data)
@@ -142,7 +159,29 @@ class ChatCompletionsRequest(BaseModel):
             include_obfuscation = stream_options.get("include_obfuscation")
             if include_obfuscation is not None:
                 data["stream_options"] = {"include_obfuscation": include_obfuscation}
-        instructions, input_items = coerce_messages("", cast(list[JsonValue], messages))
+
+        if messages is None or (not messages and "input" in data):
+            # Some OpenAI-compatible clients route Responses-shaped payloads
+            # through /v1/chat/completions. Keep that payload intact after
+            # applying chat-level normalizations instead of rejecting it for
+            # a missing or explicitly empty `messages` field.
+            if not isinstance(data.get("instructions"), str):
+                data["instructions"] = ""
+            data["tools"] = raw_tools
+            if raw_tool_choice is not None:
+                data["tool_choice"] = raw_tool_choice
+            return ResponsesRequest.model_validate(data)
+
+        tools = _normalize_chat_tools(raw_tools)
+        tool_choice = _normalize_tool_choice(raw_tool_choice)
+        messages = _sanitize_user_messages(messages)
+        existing_instructions = data.pop("instructions", "") or ""
+        data.pop("input", None)
+        instructions, input_items = coerce_messages(
+            str(existing_instructions),
+            cast(list[JsonValue], messages),
+            preserve_instruction_roles=preserve_instruction_roles,
+        )
         data["instructions"] = instructions
         data["input"] = input_items
         data["tools"] = tools
@@ -190,14 +229,21 @@ def _normalize_chat_tools(tools: list[JsonValue]) -> list[JsonValue]:
             name = function.get("name")
             if not isinstance(name, str) or not name:
                 continue
-            normalized.append(
-                {
-                    "type": tool_type or "function",
-                    "name": name,
-                    "description": function.get("description"),
-                    "parameters": function.get("parameters"),
-                }
-            )
+            # Preserve the function-level ``strict`` flag so the responses-side
+            # ``enforce_strict_function_tools_format`` pre-validator can run on
+            # chat-completions traffic too. Without this, ``strict: true``
+            # would be silently dropped here, masking schema violations the
+            # upstream Codex backend would otherwise reject.
+            normalized_tool: dict[str, JsonValue] = {
+                "type": tool_type or "function",
+                "name": name,
+                "description": function.get("description"),
+                "parameters": function.get("parameters"),
+            }
+            strict = function.get("strict")
+            if isinstance(strict, bool):
+                normalized_tool["strict"] = strict
+            normalized.append(normalized_tool)
             continue
         if isinstance(tool_type, str):
             normalized_type = normalize_tool_type(tool_type)
@@ -227,6 +273,14 @@ def _normalize_tool_choice(tool_choice: JsonValue | None) -> JsonValue | None:
         if isinstance(name, str) and name:
             return {"type": tool_type or "function", "name": name}
     return tool_choice
+
+
+def _is_json_object_response_format(response_format: JsonValue | None) -> bool:
+    if isinstance(response_format, str):
+        return response_format == "json_object"
+    if not is_json_mapping(response_format):
+        return False
+    return response_format.get("type") == "json_object"
 
 
 def _apply_response_format(data: dict[str, JsonValue], response_format: JsonValue) -> None:
@@ -294,7 +348,7 @@ def _ensure_text_only_content(content: JsonValue, role: str) -> None:
             part_mapping = _json_mapping(part)
             if part_mapping is not None:
                 part_type = part_mapping.get("type")
-                if part_type not in (None, "text"):
+                if part_type not in (None, *_TEXT_CONTENT_PART_TYPES):
                     raise ValueError(f"{role} messages must be text-only.")
                 text = part_mapping.get("text")
                 if isinstance(text, str):
@@ -304,7 +358,7 @@ def _ensure_text_only_content(content: JsonValue, role: str) -> None:
     content_mapping = _json_mapping(content)
     if content_mapping is not None:
         part_type = content_mapping.get("type")
-        if part_type not in (None, "text"):
+        if part_type not in (None, *_TEXT_CONTENT_PART_TYPES):
             raise ValueError(f"{role} messages must be text-only.")
         text = content_mapping.get("text")
         if isinstance(text, str):
@@ -322,7 +376,7 @@ def _validate_user_content(content: JsonValue) -> None:
         if part_mapping is None:
             raise ValueError("User message content parts must be objects.")
         part_type = _part_type(part_mapping)
-        if part_type == "text":
+        if part_type in _TEXT_CONTENT_PART_TYPES:
             text = part_mapping.get("text")
             if not isinstance(text, str):
                 raise ValueError("Text content parts must include a string 'text'.")

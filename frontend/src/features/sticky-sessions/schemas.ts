@@ -23,9 +23,9 @@ export const StickySessionEntrySchema = z.object({
   providerKind: StickySessionProviderKindSchema,
   routingSubjectId: z.string().min(1),
   affinityScope: StickySessionAffinityScopeSchema,
-  createdAt: z.string().datetime({ offset: true }),
-  updatedAt: z.string().datetime({ offset: true }),
-  expiresAt: z.string().datetime({ offset: true }).nullable(),
+  createdAt: z.iso.datetime({ offset: true }),
+  updatedAt: z.iso.datetime({ offset: true }),
+  expiresAt: z.iso.datetime({ offset: true }).nullable(),
   isStale: z.boolean(),
 });
 
@@ -48,7 +48,7 @@ export const StickySessionsDeleteRequestSchema = z.object({
     ),
 });
 
-export const StickySessionDeleteFailureSchema = z.object({
+const StickySessionDeleteFailureSchema = z.object({
   key: z.string().min(1),
   kind: StickySessionKindSchema,
   providerKind: StickySessionProviderKindSchema,

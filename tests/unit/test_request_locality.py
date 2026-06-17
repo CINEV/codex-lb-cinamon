@@ -10,6 +10,15 @@ import app.core.request_locality as request_locality
 from app.core.request_locality import is_host_os_request, is_local_request
 
 
+@pytest.fixture(autouse=True)
+def _default_request_locality_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        request_locality,
+        "get_settings",
+        lambda: SimpleNamespace(firewall_trust_proxy_headers=False, firewall_trusted_proxy_cidrs=[]),
+    )
+
+
 def _request(*, client_host: str, host: str) -> Request:
     scope = {
         "type": "http",

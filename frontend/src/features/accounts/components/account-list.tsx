@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, KeyRound, Plus, Search, Upload } from "lucide-react";
+import { ChevronDown, ChevronUp, KeyRound, Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -11,14 +11,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AccountListItem } from "@/features/accounts/components/account-list-item";
+import { AddAccountDialog } from "@/features/accounts/components/add-account-dialog";
 import { WindowsOauthHelp } from "@/features/accounts/components/windows-oauth-help";
 import type { AccountSummary } from "@/features/accounts/schemas";
-import { sortAccountsForDisplay } from "@/features/accounts/sorting";
+import {
+  ACCOUNT_SORT_OPTIONS,
+  DEFAULT_ACCOUNT_SORT_MODE,
+  sortAccountsForDisplay,
+  type AccountSortMode,
+} from "@/features/accounts/sorting";
 import { useAccountQuotaDisplayStore } from "@/hooks/use-account-quota-display";
 import { buildDuplicateAccountIdSet } from "@/utils/account-identifiers";
 import { formatSlug } from "@/utils/formatters";
 
-const STATUS_FILTER_OPTIONS = ["all", "active", "paused", "rate_limited", "quota_exceeded", "deactivated"];
+const STATUS_FILTER_OPTIONS = ["all", "active", "paused", "rate_limited", "quota_exceeded", "reauth_required", "deactivated"];
 
 export type AccountListProps = {
   accounts: AccountSummary[];
@@ -29,6 +35,9 @@ export type AccountListProps = {
   onOpenImport: () => void;
   onOpenOauth: () => void;
   onOpenPlatform: () => void;
+  sortMode?: AccountSortMode;
+  onSortModeChange?: (sortMode: AccountSortMode) => void;
+  readOnly?: boolean;
 };
 
 export function AccountList({
@@ -40,15 +49,20 @@ export function AccountList({
   onOpenImport,
   onOpenOauth,
   onOpenPlatform,
+  sortMode,
+  onSortModeChange,
+  readOnly = false,
 }: AccountListProps) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [helpOpen, setHelpOpen] = useState(false);
+  const [chooserOpen, setChooserOpen] = useState(false);
   const quotaDisplay = useAccountQuotaDisplayStore((s) => s.quotaDisplay);
+  const activeSortMode = sortMode ?? DEFAULT_ACCOUNT_SORT_MODE;
 
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    return sortAccountsForDisplay(accounts, quotaDisplay).filter((account) => {
+    return sortAccountsForDisplay(accounts, quotaDisplay, activeSortMode).filter((account) => {
       if (statusFilter !== "all" && account.status !== statusFilter) {
         return false;
       }
@@ -58,6 +72,8 @@ export function AccountList({
       return (
         account.email.toLowerCase().includes(needle) ||
         (account.label ?? "").toLowerCase().includes(needle) ||
+        (account.alias?.toLowerCase().includes(needle) ?? false) ||
+        account.displayName.toLowerCase().includes(needle) ||
         account.accountId.toLowerCase().includes(needle) ||
         account.planType.toLowerCase().includes(needle) ||
         (account.providerKind ?? "").toLowerCase().includes(needle) ||
@@ -67,14 +83,13 @@ export function AccountList({
         (account.eligibleRouteFamilies ?? []).some((family) => family.toLowerCase().includes(needle))
       );
     });
-  }, [accounts, quotaDisplay, search, statusFilter]);
-
+  }, [accounts, quotaDisplay, search, statusFilter, activeSortMode]);
   const duplicateAccountIds = useMemo(() => buildDuplicateAccountIdSet(accounts), [accounts]);
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <div className="relative min-w-0 flex-1">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="relative col-span-2 min-w-0">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" aria-hidden />
           <Input
             placeholder="Search accounts..."
@@ -84,7 +99,11 @@ export function AccountList({
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger size="sm" className="w-32 shrink-0">
+          <SelectTrigger
+            size="sm"
+            className="w-full min-w-0"
+            aria-label="Filter accounts by status"
+          >
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -95,28 +114,61 @@ export function AccountList({
             ))}
           </SelectContent>
         </Select>
+        <Select
+          value={activeSortMode}
+          onValueChange={(nextMode) => onSortModeChange?.(nextMode as AccountSortMode)}
+        >
+          <SelectTrigger
+            size="sm"
+            className="w-full min-w-0"
+            aria-label="Sort accounts"
+          >
+            <SelectValue placeholder="Sort accounts" />
+          </SelectTrigger>
+          <SelectContent>
+            {ACCOUNT_SORT_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
-        <Button type="button" size="sm" variant="outline" onClick={onOpenImport} className="h-8 gap-1.5 px-2 text-xs">
-          <Upload className="h-3.5 w-3.5" />
-          Import
-        </Button>
-        <Button type="button" size="sm" onClick={onOpenOauth} className="h-8 gap-1.5 px-2 text-xs">
-          <Plus className="h-3.5 w-3.5" />
-          Add Account
-        </Button>
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <Button
           type="button"
+          variant="link"
           size="sm"
-          variant="secondary"
-          onClick={onOpenPlatform}
-          disabled={platformIdentityRegistered || !platformPrerequisiteSatisfied}
-          className="h-8 gap-1.5 px-2 text-xs"
+          className="h-auto px-0 text-xs"
+          onClick={() => setHelpOpen((current) => !current)}
         >
-          <KeyRound className="h-3.5 w-3.5" />
-          Add API Key
+          Need help?
+          {helpOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
         </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            onClick={onOpenPlatform}
+            disabled={readOnly || platformIdentityRegistered || !platformPrerequisiteSatisfied}
+            className="gap-1.5"
+          >
+            <KeyRound className="h-3.5 w-3.5" />
+            Add API key
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="gap-1.5"
+            disabled={readOnly}
+            onClick={() => setChooserOpen(true)}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add account
+          </Button>
+        </div>
       </div>
       {platformIdentityRegistered ? (
         <p className="text-xs text-muted-foreground">
@@ -128,22 +180,9 @@ export function AccountList({
         </p>
       ) : null}
 
-      <div>
-        <Button
-          type="button"
-          variant="link"
-          size="sm"
-          className="h-auto px-0 text-xs"
-          onClick={() => setHelpOpen((current) => !current)}
-        >
-          Need help?
-          {helpOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-        </Button>
-      </div>
-
       {helpOpen ? <WindowsOauthHelp /> : null}
 
-      <div className="max-h-[calc(100vh-16rem)] space-y-1 overflow-y-auto p-1">
+      <div className="max-h-[calc(100vh-16rem)] space-y-1 overflow-y-auto p-1" data-testid="account-list-scroll-region">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed p-6 text-center">
             <p className="text-sm font-medium text-muted-foreground">No matching accounts</p>
@@ -155,12 +194,19 @@ export function AccountList({
               key={account.accountId}
               account={account}
               selected={account.accountId === selectedAccountId}
-              showAccountId={duplicateAccountIds.has(account.accountId)}
+              showAccountId={account.isEmailDuplicate === true || duplicateAccountIds.has(account.accountId)}
               onSelect={onSelect}
             />
           ))
         )}
       </div>
+
+      <AddAccountDialog
+        open={chooserOpen}
+        onOpenChange={setChooserOpen}
+        onImport={onOpenImport}
+        onAddAccount={onOpenOauth}
+      />
     </div>
   );
 }

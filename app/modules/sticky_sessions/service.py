@@ -155,10 +155,7 @@ class StickySessionsService:
             targets.append(target)
 
         deleted_rows = await self._repository.delete_entries_scoped(targets)
-        deleted = cast(
-            "list[tuple[str, StickySessionKind, ProviderKind]]",
-            [(key, kind, _coerce_provider_kind(provider_kind)) for key, kind, provider_kind in deleted_rows],
-        )
+        deleted = [(key, kind, _coerce_provider_kind(provider_kind)) for key, kind, provider_kind in deleted_rows]
         deleted_set = set(deleted)
 
         for key, kind, provider_kind in targets:
