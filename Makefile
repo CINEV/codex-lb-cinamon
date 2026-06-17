@@ -4,6 +4,7 @@ HELM_SMOKE_IMAGE_REGISTRY ?= ghcr.io
 HELM_SMOKE_IMAGE_REPOSITORY ?= soju06/codex-lb
 HELM_SMOKE_IMAGE_TAG ?= ci
 HELM_SMOKE_BUILD_IMAGE ?= true
+HELM_SMOKE_MODES ?= bundled external-db
 HELM_SMOKE_IMAGE := $(HELM_SMOKE_IMAGE_REGISTRY)/$(HELM_SMOKE_IMAGE_REPOSITORY):$(HELM_SMOKE_IMAGE_TAG)
 POSTGRES_PYTEST_TARGETS := \
 	tests/integration/test_migrations.py::test_postgresql_migration_contract_policy_and_drift_match \
@@ -160,8 +161,10 @@ ifeq ($(HELM_SMOKE_BUILD_IMAGE),true)
 	docker build -t $(HELM_SMOKE_IMAGE) .
 endif
 	kind load docker-image $(HELM_SMOKE_IMAGE) --name codex-lb-smoke
-	KUBE_CONTEXT=kind-codex-lb-smoke IMAGE_REGISTRY=$(HELM_SMOKE_IMAGE_REGISTRY) IMAGE_REPOSITORY=$(HELM_SMOKE_IMAGE_REPOSITORY) IMAGE_TAG=$(HELM_SMOKE_IMAGE_TAG) ./scripts/helm-kind-smoke.sh bundled
-	KUBE_CONTEXT=kind-codex-lb-smoke IMAGE_REGISTRY=$(HELM_SMOKE_IMAGE_REGISTRY) IMAGE_REPOSITORY=$(HELM_SMOKE_IMAGE_REPOSITORY) IMAGE_TAG=$(HELM_SMOKE_IMAGE_TAG) ./scripts/helm-kind-smoke.sh external-db
+	set -e; \
+	for mode in $(HELM_SMOKE_MODES); do \
+	  KUBE_CONTEXT=kind-codex-lb-smoke IMAGE_REGISTRY=$(HELM_SMOKE_IMAGE_REGISTRY) IMAGE_REPOSITORY=$(HELM_SMOKE_IMAGE_REPOSITORY) IMAGE_TAG=$(HELM_SMOKE_IMAGE_TAG) ./scripts/helm-kind-smoke.sh "$${mode}"; \
+	done
 
 .PHONY: ci-fast ci
 ci-fast: lint typecheck frontend-test test-unit package

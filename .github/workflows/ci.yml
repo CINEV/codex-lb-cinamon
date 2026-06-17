@@ -609,11 +609,17 @@ jobs:
         run: make helm-check
 
   helm-smoke-kind:
-    name: Helm smoke install (kind)
+    name: Helm smoke install (kind, ${{ matrix.smoke-mode }})
     runs-on: ubuntu-24.04
     needs: changes
     if: needs.changes.outputs.helm == 'true'
     timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        smoke-mode:
+          - bundled
+          - external-db
     env:
       DOCKER_CACHE_SCOPE: ${{ github.event_name == 'pull_request' && format('codex-lb-cinamon-pr-{0}', github.event.pull_request.number) || 'codex-lb-cinamon-main' }}
 
@@ -672,7 +678,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ env.DOCKER_CACHE_SCOPE }}
 
       - name: Helm smoke install
-        run: make HELM_SMOKE_BUILD_IMAGE=false helm-smoke-kind
+        run: make HELM_SMOKE_BUILD_IMAGE=false HELM_SMOKE_MODES="${{ matrix.smoke-mode }}" helm-smoke-kind
 
   ci-required:
     name: CI Required
