@@ -1,5 +1,10 @@
 PYTEST_ARGS := -q -ra -o faulthandler_timeout=300 -o faulthandler_exit_on_timeout=true --timeout=180 --timeout-method=thread --durations=20
 POSTGRES_TEST_DATABASE_URL ?= postgresql+asyncpg://codex_lb:codex_lb@127.0.0.1:5432/codex_lb
+HELM_SMOKE_IMAGE_REGISTRY ?= ghcr.io
+HELM_SMOKE_IMAGE_REPOSITORY ?= soju06/codex-lb
+HELM_SMOKE_IMAGE_TAG ?= ci
+HELM_SMOKE_BUILD_IMAGE ?= true
+HELM_SMOKE_IMAGE := $(HELM_SMOKE_IMAGE_REGISTRY)/$(HELM_SMOKE_IMAGE_REPOSITORY):$(HELM_SMOKE_IMAGE_TAG)
 POSTGRES_PYTEST_TARGETS := \
 	tests/integration/test_migrations.py::test_postgresql_migration_contract_policy_and_drift_match \
 	tests/integration/test_migrations.py::test_postgresql_upgrade_head_from_empty_database \
@@ -151,10 +156,12 @@ helm-check: helm-lint helm-template helm-kubeconform
 
 helm-smoke-kind:
 	kind create cluster --name codex-lb-smoke --image kindest/node:v1.35.0 --wait 120s
-	docker build -t ghcr.io/soju06/codex-lb:ci .
-	kind load docker-image ghcr.io/soju06/codex-lb:ci --name codex-lb-smoke
-	KUBE_CONTEXT=kind-codex-lb-smoke IMAGE_REGISTRY=ghcr.io IMAGE_REPOSITORY=soju06/codex-lb IMAGE_TAG=ci ./scripts/helm-kind-smoke.sh bundled
-	KUBE_CONTEXT=kind-codex-lb-smoke IMAGE_REGISTRY=ghcr.io IMAGE_REPOSITORY=soju06/codex-lb IMAGE_TAG=ci ./scripts/helm-kind-smoke.sh external-db
+ifeq ($(HELM_SMOKE_BUILD_IMAGE),true)
+	docker build -t $(HELM_SMOKE_IMAGE) .
+endif
+	kind load docker-image $(HELM_SMOKE_IMAGE) --name codex-lb-smoke
+	KUBE_CONTEXT=kind-codex-lb-smoke IMAGE_REGISTRY=$(HELM_SMOKE_IMAGE_REGISTRY) IMAGE_REPOSITORY=$(HELM_SMOKE_IMAGE_REPOSITORY) IMAGE_TAG=$(HELM_SMOKE_IMAGE_TAG) ./scripts/helm-kind-smoke.sh bundled
+	KUBE_CONTEXT=kind-codex-lb-smoke IMAGE_REGISTRY=$(HELM_SMOKE_IMAGE_REGISTRY) IMAGE_REPOSITORY=$(HELM_SMOKE_IMAGE_REPOSITORY) IMAGE_TAG=$(HELM_SMOKE_IMAGE_TAG) ./scripts/helm-kind-smoke.sh external-db
 
 .PHONY: ci-fast ci
 ci-fast: lint typecheck frontend-test test-unit package
