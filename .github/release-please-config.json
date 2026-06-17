@@ -5,13 +5,13 @@
   "packages": {
     ".": {
       "release-type": "python",
+      "versioning-strategy": "always-bump-patch",
       "changelog-path": "CHANGELOG.md",
       "extra-files": [
         "app/__init__.py",
         {
-          "type": "toml",
-          "path": "uv.lock",
-          "jsonpath": "$.package[?(@.name=='codex-lb-cinamon')].version"
+          "type": "generic",
+          "path": "uv.lock"
         },
         {
           "type": "json",

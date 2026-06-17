@@ -190,7 +190,7 @@ def _read_project_versions_at_ref(root: Path, ref: str) -> dict[str, str]:
         "uv.lock": find(
             r'\[\[package\]\]\nname = "'
             + re.escape(package_name)
-            + r'"\nversion = "([^"]+)"\nsource = \{ editable = "\." \}',
+            + r'"\nversion = "([^"]+)"[^\n]*\nsource = \{ editable = "\." \}',
             uv_text,
             f"uv.lock {package_name} version",
         ),

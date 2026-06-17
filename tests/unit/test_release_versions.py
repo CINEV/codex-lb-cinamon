@@ -133,6 +133,22 @@ def test_update_project_versions_uses_pyproject_package_name_for_uv_lock(tmp_pat
     assert 'name = "codex-lb-cinamon"\nversion = "1.20.1"' in (tmp_path / "uv.lock").read_text(encoding="utf-8")
 
 
+def test_update_project_versions_preserves_uv_lock_release_please_annotation(tmp_path: Path) -> None:
+    write_minimal_release_files(tmp_path, package_name="codex-lb-cinamon")
+    (tmp_path / "uv.lock").write_text(
+        "[[package]]\n"
+        'name = "codex-lb-cinamon"\n'
+        'version = "1.20.0" # x-release-please-version\n'
+        'source = { editable = "." }\n',
+        encoding="utf-8",
+    )
+
+    update_project_versions(tmp_path, "1.20.1")
+
+    assert_project_versions(tmp_path, "1.20.1")
+    assert 'version = "1.20.1" # x-release-please-version' in (tmp_path / "uv.lock").read_text(encoding="utf-8")
+
+
 def test_assert_project_versions_accepts_pep440_uv_lock_prerelease(tmp_path: Path) -> None:
     write_minimal_release_files(tmp_path, "1.20.0-beta.3")
     (tmp_path / "uv.lock").write_text(

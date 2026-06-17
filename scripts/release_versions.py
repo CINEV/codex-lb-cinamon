@@ -167,7 +167,7 @@ def update_project_versions(root: Path, version: str) -> None:
     uv_text, count = re.subn(
         r'(\[\[package\]\]\nname = "'
         + re.escape(package_name)
-        + r'"\nversion = ")[^"]+("\nsource = \{ editable = "\." \})',
+        + r'"\nversion = ")[^"]+("[^\n]*\nsource = \{ editable = "\." \})',
         rf"\g<1>{version}\2",
         uv_text,
         count=1,
@@ -202,7 +202,7 @@ def read_project_versions(root: Path) -> dict[str, str]:
         "uv.lock": find(
             r'\[\[package\]\]\nname = "'
             + re.escape(package_name)
-            + r'"\nversion = "([^"]+)"\nsource = \{ editable = "\." \}',
+            + r'"\nversion = "([^"]+)"[^\n]*\nsource = \{ editable = "\." \}',
             uv_text,
             f"uv.lock {package_name} version",
         ),
