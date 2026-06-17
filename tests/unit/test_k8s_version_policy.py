@@ -23,11 +23,19 @@ def test_ci_uses_1_32_minimum_and_1_35_baseline() -> None:
     assert "make helm-check" in workflow
     assert "HELM_SMOKE_MODES ?= bundled external-db" in makefile
     assert "smoke-mode:" in workflow
-    assert "HELM_SMOKE_BUILD_IMAGE=false HELM_SMOKE_MODES=" in workflow
+    assert "make helm-smoke-kind-create" in workflow
+    assert "make HELM_SMOKE_BUILD_IMAGE=false helm-smoke-kind-load-image" in workflow
+    assert "make HELM_SMOKE_MODES=" in workflow
+    assert "helm-smoke-kind-run" in workflow
+    assert "Dump kind diagnostics" in workflow
     assert "set -e -o pipefail" in makefile
     assert "for version in 1.32.0 1.35.0" in makefile
     assert '-kubernetes-version "$${version}"' in makefile
     assert "kind create cluster --name codex-lb-smoke --image kindest/node:v1.35.0 --wait 120s" in makefile
+    assert (
+        "helm-smoke-kind: helm-smoke-kind-create helm-smoke-kind-build-image "
+        "helm-smoke-kind-load-image helm-smoke-kind-run" in makefile
+    )
     assert "kubeconform (K8s 1.25.0)" not in workflow
     assert "kubeconform (K8s 1.28.0)" not in workflow
     assert "kubeconform (K8s 1.31.0)" not in workflow

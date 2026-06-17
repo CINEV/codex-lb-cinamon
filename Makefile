@@ -152,19 +152,27 @@ helm-kubeconform:
 	      -summary; \
 	done
 
-.PHONY: helm-check helm-smoke-kind
+.PHONY: helm-check helm-smoke-kind helm-smoke-kind-create helm-smoke-kind-build-image helm-smoke-kind-load-image helm-smoke-kind-run
 helm-check: helm-lint helm-template helm-kubeconform
 
-helm-smoke-kind:
+helm-smoke-kind-create:
 	kind create cluster --name codex-lb-smoke --image kindest/node:v1.35.0 --wait 120s
+
+helm-smoke-kind-build-image:
 ifeq ($(HELM_SMOKE_BUILD_IMAGE),true)
 	docker build -t $(HELM_SMOKE_IMAGE) .
 endif
+
+helm-smoke-kind-load-image:
 	kind load docker-image $(HELM_SMOKE_IMAGE) --name codex-lb-smoke
+
+helm-smoke-kind-run:
 	set -e; \
 	for mode in $(HELM_SMOKE_MODES); do \
 	  KUBE_CONTEXT=kind-codex-lb-smoke IMAGE_REGISTRY=$(HELM_SMOKE_IMAGE_REGISTRY) IMAGE_REPOSITORY=$(HELM_SMOKE_IMAGE_REPOSITORY) IMAGE_TAG=$(HELM_SMOKE_IMAGE_TAG) ./scripts/helm-kind-smoke.sh "$${mode}"; \
 	done
+
+helm-smoke-kind: helm-smoke-kind-create helm-smoke-kind-build-image helm-smoke-kind-load-image helm-smoke-kind-run
 
 .PHONY: ci-fast ci
 ci-fast: lint typecheck frontend-test test-unit package

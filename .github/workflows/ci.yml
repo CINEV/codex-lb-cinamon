@@ -677,8 +677,25 @@ jobs:
           cache-from: type=gha,scope=${{ env.DOCKER_CACHE_SCOPE }}
           cache-to: type=gha,mode=max,scope=${{ env.DOCKER_CACHE_SCOPE }}
 
+      - name: Create kind cluster
+        timeout-minutes: 10
+        run: make helm-smoke-kind-create
+
+      - name: Load Docker image into kind
+        timeout-minutes: 10
+        run: make HELM_SMOKE_BUILD_IMAGE=false helm-smoke-kind-load-image
+
       - name: Helm smoke install
-        run: make HELM_SMOKE_BUILD_IMAGE=false HELM_SMOKE_MODES="${{ matrix.smoke-mode }}" helm-smoke-kind
+        timeout-minutes: 25
+        run: make HELM_SMOKE_MODES="${{ matrix.smoke-mode }}" helm-smoke-kind-run
+
+      - name: Dump kind diagnostics
+        if: failure()
+        run: |
+          set +e
+          kubectl --context kind-codex-lb-smoke get nodes -o wide
+          kubectl --context kind-codex-lb-smoke get pods -A -o wide
+          kubectl --context kind-codex-lb-smoke get events -A --sort-by=.lastTimestamp
 
   ci-required:
     name: CI Required
