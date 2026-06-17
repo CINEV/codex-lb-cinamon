@@ -45,6 +45,10 @@ def _add_serve_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _has_explicit_option(args: Sequence[str], option: str) -> bool:
+    return any(arg == option or arg.startswith(f"{option}=") for arg in args)
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run the codex-lb-cinamon API server.",
@@ -126,7 +130,13 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         return _build_parser().parse_args(raw_args)
     if not raw_args or raw_args[0].startswith("-"):
         raw_args = ["serve", *raw_args]
-    return _build_parser().parse_args(raw_args)
+    args = _build_parser().parse_args(raw_args)
+    if args.command in {"serve", "start"}:
+        if _has_explicit_option(raw_args, "--port"):
+            args.port = _parse_server_port(args.port)
+        if _has_explicit_option(raw_args, "--timeout-keep-alive"):
+            args.timeout_keep_alive = _parse_server_timeout_keep_alive(args.timeout_keep_alive)
+    return args
 
 
 def _serve_options_from_args(args: argparse.Namespace) -> ServeOptions:

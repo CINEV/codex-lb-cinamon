@@ -10,10 +10,11 @@ def test_chart_kube_version_floor_is_1_32() -> None:
     assert chart["kubeVersion"] == ">=1.32.0-0"
 
 
-def test_chart_readme_documents_modern_support_policy() -> None:
+def test_chart_readme_documents_fork_support_policy() -> None:
     readme = Path("deploy/helm/codex-lb/README.md").read_text(encoding="utf-8")
-    assert "Kubernetes 1.32+" in readme
-    assert "Validation baseline in CI and smoke installs: `1.35`" in readme
+    assert "Helm/Kubernetes 배포 문서는 더 이상 적극적으로 관리하지 않습니다." in readme
+    assert "차트 메타데이터의 최소 Kubernetes 버전은 `1.32`입니다." in readme
+    assert "CI의 차트 검증은 `1.35` 렌더링 기준을 사용합니다." in readme
 
 
 def test_ci_uses_1_32_minimum_and_1_35_baseline() -> None:

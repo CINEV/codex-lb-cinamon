@@ -205,7 +205,10 @@ _HTTP_BRIDGE_BACKGROUND_CLEANUP_WARN_THRESHOLD = 100
 async def _sticky_chatgpt_preferred_account_id(self: Any, affinity: _AffinityPolicy) -> str | None:
     if affinity.key is None or affinity.kind != StickySessionKind.CODEX_SESSION:
         return None
-    async with self._repo_factory() as repos:
+    repo_context = self._repo_factory() if callable(self._repo_factory) else self._repo_factory
+    async with repo_context as repos:
+        if repos is None or not hasattr(repos, "sticky_sessions"):
+            return None
         sticky_target = await repos.sticky_sessions.get_target(
             affinity.key,
             kind=affinity.kind,
