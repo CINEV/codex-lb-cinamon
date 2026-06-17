@@ -27,4 +27,6 @@ The merged deployment and install surfaces MUST report version `1.20.0` while pr
 - **WHEN** release-managed files are validated after the merge
 - **THEN** the manifest and package version surfaces MUST be consistent at `1.20.0`
 - **AND** release helpers MUST read the fork package name from `pyproject.toml` when validating `uv.lock`
+- **AND** Release Please MUST use the fork baseline as its bootstrap boundary for this integration
+- **AND** Release Please MUST use a patch-only versioning strategy for the immediate post-merge stable train
 - **AND** the next stable Release Please patch PR MUST be able to advance the fork train to `1.20.1`

@@ -1,5 +1,7 @@
 {
   "release-type": "python",
+  "versioning-strategy": "always-bump-patch",
+  "bootstrap-sha": "8a6c9fde6b885c8003bea610fee1a38e0862119b",
   "packages": {
     ".": {
       "release-type": "python",
