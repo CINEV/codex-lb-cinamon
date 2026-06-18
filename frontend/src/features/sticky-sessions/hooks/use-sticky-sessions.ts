@@ -43,7 +43,7 @@ export function useStickySessions() {
     [deferredAccountQuery, deferredKeyQuery, params],
   );
 
-  const stickySessionsQuery = useQuery({
+  const { data, error, isFetching, isLoading, isPending, isSuccess, refetch } = useQuery({
     queryKey: ["sticky-sessions", "list", queryParams],
     queryFn: () => listStickySessions(queryParams),
     placeholderData: (previousData) => previousData,
@@ -51,10 +51,7 @@ export function useStickySessions() {
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
-
-  const invalidate = () => {
-    void queryClient.invalidateQueries({ queryKey: ["sticky-sessions", "list"] });
-  };
+  const stickySessionsQuery = { data, error, isFetching, isLoading, isPending, isSuccess, refetch };
 
   const setOffset = (offset: number) => {
     setParams((current) => ({ ...current, offset }));
@@ -92,7 +89,7 @@ export function useStickySessions() {
       } else {
         toast.error("No selected sessions could be deleted");
       }
-      await invalidate();
+      await queryClient.invalidateQueries({ queryKey: ["sticky-sessions", "list"] });
     },
     onError: (error: Error) => {
       toast.error(error.message || "Failed to delete sticky sessions");
@@ -115,7 +112,7 @@ export function useStickySessions() {
       } else {
         toast.error("No filtered sessions could be deleted");
       }
-      await invalidate();
+      await queryClient.invalidateQueries({ queryKey: ["sticky-sessions", "list"] });
     },
     onError: (error: Error) => {
       toast.error(error.message || "Failed to delete filtered sticky sessions");
@@ -126,7 +123,7 @@ export function useStickySessions() {
     mutationFn: (staleOnly: boolean) => purgeStickySessions({ staleOnly }),
     onSuccess: (response) => {
       toast.success(`Purged ${response.deletedCount} sticky sessions`);
-      invalidate();
+      void queryClient.invalidateQueries({ queryKey: ["sticky-sessions", "list"] });
     },
     onError: (error: Error) => {
       toast.error(error.message || "Failed to purge sticky sessions");

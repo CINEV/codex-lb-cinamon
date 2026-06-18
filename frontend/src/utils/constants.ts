@@ -3,6 +3,7 @@ export const STATUS_LABELS = {
   paused: "Paused",
   limited: "Rate limited",
   exceeded: "Quota exceeded",
+  reauth: "Re-auth required",
   deactivated: "Deactivated",
 } as const;
 
@@ -23,6 +24,11 @@ export const ROUTING_LABELS = {
   usage_weighted: "usage weighted",
   round_robin: "round robin",
   capacity_weighted: "capacity weighted",
+  relative_availability: "relative availability",
+  fill_first: "fill first",
+  sequential_drain: "sequential drain",
+  reset_drain: "reset drain",
+  single_account: "single account",
   sticky: "sticky",
 } as const;
 
@@ -53,8 +59,6 @@ export const DONUT_COLORS_DARK = [
   "#db2777",
   "#0891b2",
 ] as const;
-
-export const DONUT_COLORS = DONUT_COLORS_LIGHT;
 
 export const MESSAGE_TONE_META = {
   success: {

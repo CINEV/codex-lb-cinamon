@@ -3,19 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { SessionSettings } from "@/features/settings/components/session-settings";
+import { buildSettingsUpdateRequest } from "@/features/settings/payload";
+import { createDashboardSettings } from "@/test/mocks/factories";
 
-const baseSettings = {
-  stickyThreadsEnabled: true,
-  upstreamStreamTransport: "default" as const,
-  preferEarlierResetAccounts: false,
-  routingStrategy: "usage_weighted" as const,
-  openaiCacheAffinityMaxAgeSeconds: 300,
-  dashboardSessionTtlSeconds: 43200,
-  importWithoutOverwrite: false,
-  totpRequiredOnLogin: false,
-  totpConfigured: true,
-  apiKeyAuthEnabled: true,
-};
+const baseSettings = createDashboardSettings();
+const baseUpdatePayload = buildSettingsUpdateRequest(baseSettings, {});
 
 describe("SessionSettings", () => {
   it("shows the current dashboard session lifetime in hours", () => {
@@ -35,15 +27,9 @@ describe("SessionSettings", () => {
     await user.click(screen.getByRole("button", { name: "Save lifetime" }));
 
     expect(onSave).toHaveBeenCalledWith({
-      stickyThreadsEnabled: true,
-      upstreamStreamTransport: "default",
-      preferEarlierResetAccounts: false,
-      routingStrategy: "usage_weighted",
-      openaiCacheAffinityMaxAgeSeconds: 300,
+      ...baseUpdatePayload,
       dashboardSessionTtlSeconds: 86400,
-      importWithoutOverwrite: false,
-      totpRequiredOnLogin: false,
-      apiKeyAuthEnabled: true,
+      guestAccessEnabled: false,
     });
   });
 
@@ -93,15 +79,9 @@ describe("SessionSettings", () => {
     await user.click(screen.getByRole("button", { name: "Save lifetime" }));
 
     expect(onSave).toHaveBeenCalledWith({
-      stickyThreadsEnabled: true,
-      upstreamStreamTransport: "default",
-      preferEarlierResetAccounts: false,
-      routingStrategy: "usage_weighted",
-      openaiCacheAffinityMaxAgeSeconds: 300,
+      ...baseUpdatePayload,
       dashboardSessionTtlSeconds: 31536000,
-      importWithoutOverwrite: false,
-      totpRequiredOnLogin: false,
-      apiKeyAuthEnabled: true,
+      guestAccessEnabled: false,
     });
   });
 });

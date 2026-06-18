@@ -1,5 +1,7 @@
 # syntax=docker/dockerfile:1.7
-FROM oven/bun:1.3.10-alpine AS frontend-build
+FROM ghcr.io/astral-sh/uv:0.11.21 AS uv-bin
+
+FROM oven/bun:1.3.14-alpine AS frontend-build
 
 WORKDIR /app/frontend
 
@@ -10,7 +12,7 @@ RUN --mount=type=cache,target=/root/.bun/install/cache \
 COPY frontend ./
 RUN bun run build
 
-FROM python:3.13-slim AS python-build
+FROM python:3.14-slim AS python-build
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -19,22 +21,33 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
+COPY --from=uv-bin /uv /uvx /usr/local/bin/
 
-RUN pip install --no-cache-dir uv
+RUN python -m venv --without-pip /opt/venv
+ENV PATH="/opt/venv/bin:/usr/local/bin:$PATH"
 
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-project --extra metrics --extra tracing
 
-FROM python:3.13-slim AS runtime
+FROM python:3.14-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /app
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --only-upgrade \
+        libc-bin libc6 libcap2 libsystemd0 libudev1 sed \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python -m pip uninstall -y pip setuptools wheel || true \
+    && rm -f /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.13 \
+    && rm -rf /usr/local/lib/python*/site-packages/pip* \
+        /usr/local/lib/python*/site-packages/setuptools* \
+        /usr/local/lib/python*/site-packages/wheel*
 
 RUN adduser --disabled-password --gecos "" app \
     && mkdir -p /var/lib/codex-lb \
@@ -46,7 +59,11 @@ COPY config config
 COPY scripts scripts
 COPY --from=frontend-build /app/app/static app/static
 
-RUN chmod +x /app/scripts/docker-entrypoint.sh
+# The runtime image copies source files instead of installing the project, so
+# recreate the console-script entry point that pyproject would normally install.
+RUN chmod +x /app/scripts/docker-entrypoint.sh \
+    && printf '%s\n' '#!/bin/sh' 'exec python -m app.cli "$@"' > /usr/local/bin/codex-lb-cinamon \
+    && chmod +x /usr/local/bin/codex-lb-cinamon
 
 USER app
 EXPOSE 2455 1455

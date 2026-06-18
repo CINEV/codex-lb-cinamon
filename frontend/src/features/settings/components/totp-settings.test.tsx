@@ -10,6 +10,8 @@ import {
 } from "@/features/auth/api";
 import { useAuthStore } from "@/features/auth/hooks/use-auth";
 import { TotpSettings } from "@/features/settings/components/totp-settings";
+import { buildSettingsUpdateRequest } from "@/features/settings/payload";
+import { createDashboardSettings } from "@/test/mocks/factories";
 
 vi.mock("@/features/auth/api", () => ({
   startTotpSetup: vi.fn(),
@@ -17,22 +19,16 @@ vi.mock("@/features/auth/api", () => ({
   disableTotp: vi.fn(),
 }));
 
-const baseSettings = {
-  stickyThreadsEnabled: true,
-  upstreamStreamTransport: "default" as const,
-  preferEarlierResetAccounts: false,
-  routingStrategy: "usage_weighted" as const,
-  openaiCacheAffinityMaxAgeSeconds: 300,
-  dashboardSessionTtlSeconds: 43200,
-  importWithoutOverwrite: false,
-  totpRequiredOnLogin: false,
-  totpConfigured: false,
-  apiKeyAuthEnabled: true,
-};
+const baseSettings = createDashboardSettings({ totpConfigured: false });
+const baseUpdatePayload = buildSettingsUpdateRequest(baseSettings, {});
 
 function renderWithClient(ui: React.ReactElement) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
+  );
 }
 
 describe("TotpSettings", () => {
@@ -51,10 +47,17 @@ describe("TotpSettings", () => {
 
   it("shows setup button when not configured", () => {
     renderWithClient(
-      <TotpSettings settings={baseSettings} onSave={vi.fn().mockResolvedValue(undefined)} />,
+      <TotpSettings
+        settings={baseSettings}
+        onSave={vi.fn().mockResolvedValue(undefined)}
+      />,
     );
-    expect(screen.getByRole("button", { name: "Enable TOTP" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Disable" })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Enable TOTP" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Disable" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows disable button when configured", () => {
@@ -65,7 +68,9 @@ describe("TotpSettings", () => {
       />,
     );
     expect(screen.getByRole("button", { name: "Disable" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Enable TOTP" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Enable TOTP" }),
+    ).not.toBeInTheDocument();
   });
 
   it("supports setup flow via dialog", async () => {
@@ -79,40 +84,34 @@ describe("TotpSettings", () => {
     });
     vi.mocked(confirmTotpSetup).mockResolvedValue({ status: "ok" });
 
-    renderWithClient(
-      <TotpSettings settings={baseSettings} onSave={onSave} />,
-    );
+    renderWithClient(<TotpSettings settings={baseSettings} onSave={onSave} />);
 
     await user.click(screen.getByRole("button", { name: "Enable TOTP" }));
 
     // Dialog opens with QR and secret
     expect(await screen.findByText("Secret: SECRET123")).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "TOTP QR code" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: "TOTP QR code" }),
+    ).toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Verification code"), "123456");
     await user.click(screen.getByRole("button", { name: "Confirm setup" }));
-    expect(confirmTotpSetup).toHaveBeenCalledWith({ secret: "SECRET123", code: "123456" });
+    expect(confirmTotpSetup).toHaveBeenCalledWith({
+      secret: "SECRET123",
+      code: "123456",
+    });
   });
 
   it("toggles require-on-login via switch", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue(undefined);
 
-    renderWithClient(
-      <TotpSettings settings={baseSettings} onSave={onSave} />,
-    );
+    renderWithClient(<TotpSettings settings={baseSettings} onSave={onSave} />);
 
     await user.click(screen.getByRole("switch"));
     expect(onSave).toHaveBeenCalledWith({
-      stickyThreadsEnabled: true,
-      upstreamStreamTransport: "default",
-      preferEarlierResetAccounts: false,
-      routingStrategy: "usage_weighted",
-      openaiCacheAffinityMaxAgeSeconds: 300,
-      dashboardSessionTtlSeconds: 43200,
-      importWithoutOverwrite: false,
+      ...baseUpdatePayload,
       totpRequiredOnLogin: true,
-      apiKeyAuthEnabled: true,
     });
   });
 

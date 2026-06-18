@@ -13,6 +13,8 @@ from app.modules.proxy.additional_model_limits import (
 from app.modules.usage.additional_quota_keys import (
     canonicalize_additional_quota_key,
     clear_additional_quota_registry_cache,
+    get_additional_quota_definition_for_model,
+    get_additional_quota_routing_policy,
     reload_additional_quota_registry,
 )
 
@@ -26,6 +28,13 @@ def test_get_additional_model_limit_returns_seeded_mapping() -> None:
     assert resolved.model == "gpt-5.3-codex-spark"
     assert resolved.quota_key == "codex_spark"
     assert resolved.display_label == "GPT-5.3-Codex-Spark"
+
+
+def test_seeded_codex_spark_quota_is_plan_applicable() -> None:
+    resolved = get_additional_quota_definition_for_model("gpt-5.3-codex-spark")
+
+    assert resolved is not None
+    assert resolved.applies_to_plans == frozenset({"pro", "prolite", "team", "business", "enterprise"})
 
 
 def test_get_additional_model_limit_normalizes_case_and_whitespace() -> None:
@@ -106,6 +115,31 @@ def test_registry_resolves_legacy_quota_key_alias(monkeypatch, tmp_path: Path) -
 
     assert canonicalize_additional_quota_key(quota_key="codex_spark") == "spark_enterprise"
     assert canonicalize_additional_quota_key(limit_name="codex_other") == "spark_enterprise"
+
+
+def test_routing_policy_resolves_legacy_limit_alias(monkeypatch, tmp_path: Path) -> None:
+    registry = tmp_path / "additional_quota_registry.json"
+    registry.write_text(
+        json.dumps(
+            [
+                {
+                    "quota_key": "spark_enterprise",
+                    "quota_key_aliases": ["codex_spark"],
+                    "display_label": "Spark Enterprise",
+                    "model_ids": ["gpt-5.3-codex-spark"],
+                    "limit_name_aliases": ["codex_other", "GPT-5.3-Codex-Spark"],
+                    "routing_policy": "burn_first",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CODEX_LB_ADDITIONAL_QUOTA_REGISTRY_FILE", str(registry))
+    clear_additional_quota_registry_cache()
+
+    assert get_additional_quota_routing_policy("codex_other", overrides=None) == "burn_first"
+    assert get_additional_quota_routing_policy("GPT-5.3-Codex-Spark", overrides=None) == "burn_first"
+    assert get_additional_quota_routing_policy("codex_other", overrides={"spark_enterprise": "preserve"}) == "preserve"
 
 
 def test_registry_reloads_when_config_file_changes(monkeypatch, tmp_path: Path) -> None:

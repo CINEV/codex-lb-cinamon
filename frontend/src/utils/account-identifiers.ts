@@ -5,31 +5,34 @@ export type AccountIdentityLike = {
 };
 
 function identityKey(account: AccountIdentityLike): string {
-  const email = account.email.trim().toLowerCase();
-  if (email) {
-    return `email:${email}`;
-  }
-  const displayName = account.displayName.trim().toLowerCase();
-  if (displayName) {
-    return `display:${displayName}`;
-  }
-  return `id:${account.accountId}`;
+  const candidate = account.email || account.displayName || account.accountId;
+  return candidate.trim().toLowerCase();
 }
 
 export function buildDuplicateAccountIdSet<T extends AccountIdentityLike>(accounts: T[]): Set<string> {
-  const counts = new Map<string, number>();
+  const groups = new Map<string, string[]>();
+
   for (const account of accounts) {
     const key = identityKey(account);
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-
-  const duplicateAccountIds = new Set<string>();
-  for (const account of accounts) {
-    if ((counts.get(identityKey(account)) ?? 0) > 1) {
-      duplicateAccountIds.add(account.accountId);
+    const accountIds = groups.get(key);
+    if (accountIds) {
+      accountIds.push(account.accountId);
+    } else {
+      groups.set(key, [account.accountId]);
     }
   }
-  return duplicateAccountIds;
+
+  const duplicates = new Set<string>();
+  for (const accountIds of groups.values()) {
+    if (accountIds.length <= 1) {
+      continue;
+    }
+    for (const accountId of accountIds) {
+      duplicates.add(accountId);
+    }
+  }
+
+  return duplicates;
 }
 
 export function formatCompactAccountId(accountId: string, headChars = 8, tailChars = 6): string {

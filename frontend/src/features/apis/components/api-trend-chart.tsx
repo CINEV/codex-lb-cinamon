@@ -7,7 +7,7 @@ import {
   Tooltip,
   XAxis,
   YAxis,
-} from "recharts";
+} from "@/components/lazy-recharts";
 
 import { useChartColors } from "@/hooks/use-chart-colors";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
@@ -52,6 +52,7 @@ function formatCostTick(value: number): string {
 
 function formatTokenTick(value: number): string {
   if (value === 0) return "0";
+  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(0)}B`;
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(0)}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(0)}K`;
   return String(value);
@@ -99,7 +100,7 @@ function CustomTooltip({ active, payload, label }: ChartTooltipProps) {
   );
 }
 
-const CHART_MARGIN = { top: 4, right: 48, bottom: 0, left: 0 } as const;
+const CHART_MARGIN = { top: 4, right: 8, bottom: 0, left: 0 } as const;
 
 export type ApiTrendChartProps = {
   cost: ApiKeyTrendPoint[];

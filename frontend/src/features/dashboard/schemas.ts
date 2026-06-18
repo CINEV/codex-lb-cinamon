@@ -3,16 +3,15 @@ import * as z from "zod";
 import {
   AccountAdditionalQuotaSchema,
   AccountSummarySchema,
-  AccountUsageSchema,
   ProviderKindSchema,
 } from "@/features/accounts/schemas";
 import type { AccountSummary } from "@/features/accounts/schemas";
 
-export { AccountAdditionalQuotaSchema, AccountSummarySchema, AccountUsageSchema };
+export { AccountAdditionalQuotaSchema, AccountSummarySchema };
 export type { AccountSummary };
 export type { AccountAdditionalQuota as AdditionalQuota } from "@/features/accounts/schemas";
 
-export const OverviewTimeframeKeySchema = z.enum(["1d", "7d", "30d"]);
+const OverviewTimeframeKeySchema = z.enum(["1d", "7d", "30d"]);
 export type OverviewTimeframe = z.infer<typeof OverviewTimeframeKeySchema>;
 export const DEFAULT_OVERVIEW_TIMEFRAME: OverviewTimeframe = "7d";
 
@@ -21,7 +20,7 @@ export function parseOverviewTimeframe(value: string | null | undefined): Overvi
   return parsed.success ? parsed.data : DEFAULT_OVERVIEW_TIMEFRAME;
 }
 
-export const UsageHistoryItemSchema = z.object({
+const UsageHistoryItemSchema = z.object({
   accountId: z.string(),
   remainingPercentAvg: z.number().nullable(),
   capacityCredits: z.number(),
@@ -34,27 +33,27 @@ export const UsageWindowSchema = z.object({
   accounts: z.array(UsageHistoryItemSchema),
 });
 
-export const UsageSummaryWindowSchema = z.object({
+const UsageSummaryWindowSchema = z.object({
   remainingPercent: z.number(),
   capacityCredits: z.number(),
   remainingCredits: z.number(),
-  resetAt: z.string().datetime({ offset: true }).nullable(),
+  resetAt: z.iso.datetime({ offset: true }).nullable(),
   windowMinutes: z.number().nullable(),
 });
 
-export const DashboardOverviewTimeframeSchema = z.object({
+const DashboardOverviewTimeframeSchema = z.object({
   key: OverviewTimeframeKeySchema,
   windowMinutes: z.number().int().positive(),
   bucketSeconds: z.number().int().positive(),
   bucketCount: z.number().int().positive(),
 });
 
-export const UsageCostSchema = z.object({
+const UsageCostSchema = z.object({
   currency: z.string(),
   totalUsd: z.number(),
 });
 
-export const DashboardMetricsSchema = z.object({
+const DashboardMetricsSchema = z.object({
   requests: z.number().nullable(),
   tokens: z.number().nullable(),
   cachedInputTokens: z.number().nullable(),
@@ -63,12 +62,23 @@ export const DashboardMetricsSchema = z.object({
   topError: z.string().nullable(),
 });
 
-export const TrendPointSchema = z.object({
-  t: z.string().datetime({ offset: true }),
+const DashboardMetricsComparisonPreviousSchema = z.object({
+  requests: z.number(),
+  tokens: z.number(),
+  costUsd: z.number(),
+});
+
+const DashboardMetricsComparisonSchema = z.object({
+  canCompare: z.boolean(),
+  previous: DashboardMetricsComparisonPreviousSchema,
+});
+
+const TrendPointSchema = z.object({
+  t: z.iso.datetime({ offset: true }),
   v: z.number(),
 });
 
-export const MetricsTrendsSchema = z.object({
+const MetricsTrendsSchema = z.object({
   requests: z.array(TrendPointSchema),
   tokens: z.array(TrendPointSchema),
   cost: z.array(TrendPointSchema),
@@ -80,12 +90,39 @@ export const DepletionSchema = z.object({
   riskLevel: z.enum(["safe", "warning", "danger", "critical"]),
   burnRate: z.number(),
   safeUsagePercent: z.number(),
-  projectedExhaustionAt: z.string().datetime({ offset: true }).nullable().optional(),
+  projectedExhaustionAt: z.iso.datetime({ offset: true }).nullable().optional(),
   secondsUntilExhaustion: z.number().nullable().optional(),
 });
 
+const WeeklyCreditPaceSchema = z.object({
+  totalFullCredits: z.number(),
+  totalActualRemainingCredits: z.number(),
+  totalExpectedRemainingCredits: z.number(),
+  actualUsedPercent: z.number(),
+  scheduledUsedPercent: z.number(),
+  deltaPercent: z.number(),
+  scheduleGapCredits: z.number(),
+  overPlanCredits: z.number(),
+  projectedShortfallCredits: z.number(),
+  pauseForBreakEvenHours: z.number().nullable(),
+  paceMultiplier: z.number().nullable(),
+  throttleToPercent: z.number().nullable(),
+  reduceByPercent: z.number().nullable(),
+  proAccountEquivalentToCoverOverPlan: z.number().nullable(),
+  proAccountsToCoverOverPlan: z.number().int().nullable(),
+  projectedDepletionHours: z.number().nullable(),
+  projectedMinimumRemainingCredits: z.number().nullable(),
+  forecastBurnRateCreditsPerHour: z.number().nullable(),
+  scheduledBurnRateCreditsPerHour: z.number(),
+  status: z.enum(["behind", "on_track", "ahead", "danger"]),
+  accountCount: z.number().int().nonnegative(),
+  staleAccountCount: z.number().int().nonnegative(),
+  inactiveAccountCount: z.number().int().nonnegative(),
+  confidence: z.enum(["high", "medium", "low"]),
+});
+
 export const DashboardOverviewSchema = z.object({
-  lastSyncAt: z.string().datetime({ offset: true }).nullable(),
+  lastSyncAt: z.iso.datetime({ offset: true }).nullable(),
   timeframe: DashboardOverviewTimeframeSchema,
   accounts: z.array(AccountSummarySchema),
   summary: z.object({
@@ -93,6 +130,7 @@ export const DashboardOverviewSchema = z.object({
     secondaryWindow: UsageSummaryWindowSchema.nullable(),
     cost: UsageCostSchema,
     metrics: DashboardMetricsSchema.nullable(),
+    comparison: DashboardMetricsComparisonSchema.optional(),
   }),
   windows: z.object({
     primary: UsageWindowSchema,
@@ -102,13 +140,27 @@ export const DashboardOverviewSchema = z.object({
   additionalQuotas: z.array(AccountAdditionalQuotaSchema).default([]),
   depletionPrimary: DepletionSchema.nullable().optional(),
   depletionSecondary: DepletionSchema.nullable().optional(),
+  weeklyCreditPace: WeeklyCreditPaceSchema.nullable().optional(),
+});
+
+export const DashboardProjectionsSchema = z.object({
+  depletionPrimary: DepletionSchema.nullable().optional(),
+  depletionSecondary: DepletionSchema.nullable().optional(),
+  weeklyCreditPace: WeeklyCreditPaceSchema.nullable().optional(),
+});
+
+const RequestLogCostBreakdownSchema = z.object({
+  inputUsd: z.number().nullable().optional().default(null),
+  cachedInputUsd: z.number().nullable().optional().default(null),
+  outputUsd: z.number().nullable().optional().default(null),
+  totalUsd: z.number().nullable().optional().default(null),
 });
 
 export const RequestLogSchema = z.object({
-  requestedAt: z.string().datetime({ offset: true }),
+  requestedAt: z.iso.datetime({ offset: true }),
   accountId: z.string().nullable(),
   planType: z.string().nullable().optional().default(null),
-  apiKeyName: z.string().nullable(),
+  apiKeyName: z.string().nullable().optional().default(null),
   apiKeyId: z.string().nullable().optional().default(null),
   requestId: z.string(),
   providerKind: ProviderKindSchema.nullable().optional().default(null),
@@ -116,18 +168,31 @@ export const RequestLogSchema = z.object({
   routeClass: z.string().nullable().optional().default(null),
   upstreamRequestId: z.string().nullable().optional().default(null),
   rejectionReason: z.string().nullable().optional().default(null),
+  requestKind: z.enum(["normal", "warmup", "limit_warmup"]).optional().default("normal"),
   model: z.string(),
+  source: z.string().nullable().optional().default(null),
   transport: z.string().nullable().optional().default(null),
+  useragent: z.string().nullable().optional().default(null),
+  useragentGroup: z.string().nullable().optional().default(null),
   serviceTier: z.string().nullable().optional().default(null),
   requestedServiceTier: z.string().nullable().optional().default(null),
   actualServiceTier: z.string().nullable().optional().default(null),
   status: z.string(),
   errorCode: z.string().nullable(),
   errorMessage: z.string().nullable(),
+  failurePhase: z.string().nullable().optional().default(null),
+  failureDetail: z.string().nullable().optional().default(null),
+  failureExceptionType: z.string().nullable().optional().default(null),
+  upstreamStatusCode: z.number().int().nullable().optional().default(null),
+  upstreamErrorCode: z.string().nullable().optional().default(null),
+  bridgeStage: z.string().nullable().optional().default(null),
   tokens: z.number().nullable(),
+  inputTokens: z.number().nullable().optional().default(null),
+  outputTokens: z.number().nullable().optional().default(null),
   cachedInputTokens: z.number().nullable(),
   reasoningEffort: z.string().nullable(),
   costUsd: z.number().nullable(),
+  costBreakdown: RequestLogCostBreakdownSchema.nullable().optional().default(null),
   latencyMs: z.number().nullable(),
 });
 
@@ -137,12 +202,12 @@ export const RequestLogsResponseSchema = z.object({
   hasMore: z.boolean(),
 });
 
-export const RequestLogModelOptionSchema = z.object({
+const RequestLogModelOptionSchema = z.object({
   model: z.string(),
   reasoningEffort: z.string().nullable(),
 });
 
-export const RequestLogApiKeyOptionSchema = z.object({
+const RequestLogApiKeyOptionSchema = z.object({
   id: z.string(),
   name: z.string(),
   keyPrefix: z.string().nullable().optional().default(null),
@@ -167,7 +232,9 @@ export const FilterStateSchema = z.object({
 });
 
 export type DashboardMetrics = z.infer<typeof DashboardMetricsSchema>;
+export type DashboardMetricsComparison = z.infer<typeof DashboardMetricsComparisonSchema>;
 export type DashboardOverview = z.infer<typeof DashboardOverviewSchema>;
+export type DashboardProjections = z.infer<typeof DashboardProjectionsSchema>;
 export type DashboardOverviewTimeframe = z.infer<typeof DashboardOverviewTimeframeSchema>;
 export type TrendPoint = z.infer<typeof TrendPointSchema>;
 export type MetricsTrends = z.infer<typeof MetricsTrendsSchema>;
@@ -177,3 +244,4 @@ export type RequestLogsResponse = z.infer<typeof RequestLogsResponseSchema>;
 export type RequestLogFilterOptions = z.infer<typeof RequestLogFilterOptionsSchema>;
 export type FilterState = z.infer<typeof FilterStateSchema>;
 export type Depletion = z.infer<typeof DepletionSchema>;
+export type ServerWeeklyCreditPace = z.infer<typeof WeeklyCreditPaceSchema>;

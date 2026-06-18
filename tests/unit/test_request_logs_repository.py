@@ -5,10 +5,12 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.exc import ResourceClosedError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.db.models import Base
+from app.db.models import Base, RequestLog
+from app.db.session import SessionLocal
 from app.modules.request_logs.repository import RequestLogsRepository
 
 
@@ -41,7 +43,7 @@ async def test_add_log_ignores_closed_transaction(async_session: AsyncSession, m
     monkeypatch.setattr(async_session, "refresh", _refresh_failure)
 
     log = await repo.add_log(
-        account_id="acc",
+        account_id=None,
         request_id="req",
         model="gpt-5.2",
         input_tokens=1000,
@@ -49,6 +51,7 @@ async def test_add_log_ignores_closed_transaction(async_session: AsyncSession, m
         latency_ms=1,
         status="success",
         error_code=None,
+        plan_type="plus",
     )
 
     assert log.request_id == "req"
@@ -71,6 +74,29 @@ async def test_add_log_defaults_chatgpt_provider_fields(async_session: AsyncSess
 
     assert log.provider_kind == "chatgpt_web"
     assert log.routing_subject_id == "acc-defaults"
+
+
+@pytest.mark.asyncio
+async def test_add_log_persists_request_kind(db_setup) -> None:
+    del db_setup
+    async with SessionLocal() as session:
+        repo = RequestLogsRepository(session)
+
+        saved = await repo.add_log(
+            account_id=None,
+            request_id="req_kind",
+            model="gpt-5.2",
+            input_tokens=10,
+            output_tokens=5,
+            latency_ms=1,
+            status="success",
+            error_code=None,
+            request_kind="warmup",
+        )
+
+        persisted = await session.scalar(select(RequestLog).where(RequestLog.id == saved.id))
+        assert persisted is not None
+        assert persisted.request_kind == "warmup"
 
 
 @pytest.mark.asyncio

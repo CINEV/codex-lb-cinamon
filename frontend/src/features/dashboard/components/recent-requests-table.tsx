@@ -24,6 +24,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PaginationControls } from "@/features/dashboard/components/filters/pagination-controls";
+import { RequestArchivePanel } from "@/features/conversation-archive/components/request-archive-panel";
 import type { AccountSummary, RequestLog } from "@/features/dashboard/schemas";
 import { REQUEST_STATUS_LABELS } from "@/utils/constants";
 import {
@@ -72,6 +73,12 @@ const PLAN_CLASS_MAP: Record<string, string> = {
   pro: "bg-violet-500/15 text-violet-700 border-violet-500/20 hover:bg-violet-500/20 dark:text-violet-300",
 };
 
+const REQUEST_KIND_LABELS: Record<string, string> = {
+  normal: "Normal",
+  warmup: "Warmup",
+  limit_warmup: "Warmup",
+};
+
 export type RecentRequestsTableProps = {
   requests: RequestLog[];
   accounts: AccountSummary[];
@@ -82,6 +89,46 @@ export type RecentRequestsTableProps = {
   onLimitChange: (limit: number) => void;
   onOffsetChange: (offset: number) => void;
 };
+
+function formatRequestCostSummary(request: RequestLog | null): string | null {
+  if (!request || request.status !== "ok") {
+    return null;
+  }
+
+  const totalUsd = request.costBreakdown?.totalUsd ?? request.costUsd;
+  const segments: string[] = [];
+  const cachedInputTokens = request.cachedInputTokens ?? 0;
+  const nonCachedInputTokens =
+    request.inputTokens == null ? null : Math.max(0, request.inputTokens - cachedInputTokens);
+
+  if (nonCachedInputTokens != null && request.costBreakdown?.inputUsd != null) {
+    segments.push(
+      `${formatCompactNumber(nonCachedInputTokens)} Input (${formatCurrency(request.costBreakdown.inputUsd)})`,
+    );
+  }
+
+  if (request.cachedInputTokens != null && request.costBreakdown?.cachedInputUsd != null) {
+    segments.push(
+      `${formatCompactNumber(request.cachedInputTokens)} Cached (${formatCurrency(request.costBreakdown.cachedInputUsd)})`,
+    );
+  }
+
+  if (request.outputTokens != null && request.costBreakdown?.outputUsd != null) {
+    segments.push(
+      `${formatCompactNumber(request.outputTokens)} Output (${formatCurrency(request.costBreakdown.outputUsd)})`,
+    );
+  }
+
+  if (segments.length === 0) {
+    return null;
+  }
+
+  if (totalUsd == null) {
+    return segments.join(" + ");
+  }
+
+  return `${formatCurrency(totalUsd)} = ${segments.join(" + ")}`;
+}
 
 export function RecentRequestsTable({
   requests,
@@ -95,6 +142,7 @@ export function RecentRequestsTable({
 }: RecentRequestsTableProps) {
   const [selectedRequest, setSelectedRequest] = useState<RequestLog | null>(null);
   const blurred = usePrivacyStore((s) => s.blurred);
+  const selectedRequestCostSummary = formatRequestCostSummary(selectedRequest);
 
   const accountLabelMap = useMemo(() => {
     const index = new Map<string, string>();
@@ -142,7 +190,7 @@ export function RecentRequestsTable({
               <TableHead className="w-24 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80">Status</TableHead>
               <TableHead className="w-24 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80">Tokens</TableHead>
               <TableHead className="w-16 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80">Cost</TableHead>
-              <TableHead className="w-72 pr-4 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80">Error</TableHead>
+              <TableHead className="w-72 pr-4 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80">Details</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -217,6 +265,11 @@ export function RecentRequestsTable({
                           {formatRouteClassLabel(request.routeClass)}
                         </div>
                       ) : null}
+                      {request.requestKind === "warmup" || request.requestKind === "limit_warmup" ? (
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {REQUEST_KIND_LABELS.warmup}
+                        </div>
+                      ) : null}
                       {showRequestedTier ? (
                         <div className="text-[11px] text-muted-foreground">
                           Requested {request.requestedServiceTier}
@@ -281,7 +334,15 @@ export function RecentRequestsTable({
                         </Button>
                       </div>
                     ) : (
-                      <span className="text-xs text-muted-foreground">-</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-[11px]"
+                        onClick={() => setSelectedRequest(request)}
+                      >
+                        View Details
+                      </Button>
                     )}
                   </TableCell>
                 </TableRow>
@@ -322,12 +383,15 @@ export function RecentRequestsTable({
               <div className="grid gap-3 sm:grid-cols-3">
                 <RequestDetailField label="Status" value={selectedRequest ? (REQUEST_STATUS_LABELS[selectedRequest.status] ?? selectedRequest.status) : "—"} />
                 <RequestDetailField label="Model" value={selectedRequest ? formatModelLabel(selectedRequest.model, selectedRequest.reasoningEffort, selectedRequest.actualServiceTier ?? selectedRequest.serviceTier) : "—"} mono />
+                <RequestDetailField label="Request kind" value={selectedRequest ? (REQUEST_KIND_LABELS[selectedRequest.requestKind] ?? selectedRequest.requestKind) : "—"} />
                 <RequestDetailField label="Plan" value={selectedRequest?.planType ? formatSlug(selectedRequest.planType) : "—"} />
                 <RequestDetailField label="Requested Tier" value={selectedRequest?.requestedServiceTier ?? "—"} />
                 <RequestDetailField label="Actual Tier" value={selectedRequest?.actualServiceTier ?? "—"} />
                 <RequestDetailField label="Provider" value={selectedRequest?.providerKind ? formatProviderLabel(selectedRequest.providerKind) : "—"} />
                 <RequestDetailField label="Routing Subject" value={selectedRequest?.routingSubjectId ?? "—"} mono />
                 <RequestDetailField label="Route Class" value={formatRouteClassLabel(selectedRequest?.routeClass)} />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
                 <RequestDetailField label="Transport" value={selectedRequest?.transport ? (TRANSPORT_LABELS[selectedRequest.transport] ?? selectedRequest.transport) : "—"} />
                 <RequestDetailField label="Time" value={selectedRequest ? formatDateTimeInline(selectedRequest.requestedAt) : "—"} />
                 <RequestDetailField label="Error Code" value={selectedRequest?.errorCode ?? "—"} mono />
@@ -340,7 +404,27 @@ export function RecentRequestsTable({
                 />
                 <RequestDetailField label="Rejection Reason" value={selectedRequest?.rejectionReason ?? "—"} mono />
               </div>
+              <RequestDetailField
+                label="User Agent"
+                value={selectedRequest?.useragent ?? "—"}
+                copyValue={selectedRequest?.useragent ?? undefined}
+                copyLabel="Copy"
+                compactCopy
+              />
             </div>
+
+            <RequestArchivePanel requestId={selectedRequest?.requestId} requestedAt={selectedRequest?.requestedAt} />
+
+            {selectedRequestCostSummary ? (
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium">Cost</h3>
+                <div className="rounded-md bg-muted/50 p-3">
+                  <p className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed">
+                    {selectedRequestCostSummary}
+                  </p>
+                </div>
+              </div>
+            ) : null}
 
             <div className="space-y-2">
               <div className="flex items-center gap-2">

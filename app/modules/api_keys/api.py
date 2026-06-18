@@ -3,10 +3,15 @@ from __future__ import annotations
 from fastapi import APIRouter, Body, Depends, Request, Response
 
 from app.core.audit.service import AuditService
-from app.core.auth.dependencies import set_dashboard_error_format, validate_dashboard_session
+from app.core.auth.dependencies import (
+    require_dashboard_write_access,
+    set_dashboard_error_format,
+    validate_dashboard_session,
+)
 from app.core.exceptions import DashboardBadRequestError, DashboardNotFoundError
 from app.dependencies import ApiKeysContext, get_api_keys_context
 from app.modules.api_keys.schemas import (
+    ApiKeyAccountCostResponse,
     ApiKeyCreateRequest,
     ApiKeyCreateResponse,
     ApiKeyResponse,
@@ -21,6 +26,7 @@ from app.modules.api_keys.service import (
     ApiKeyData,
     ApiKeyNotFoundError,
     ApiKeyUpdateData,
+    ApiKeyValidationError,
     LimitRuleInput,
 )
 
@@ -37,9 +43,11 @@ def _to_response(row: ApiKeyData) -> ApiKeyResponse:
         name=row.name,
         key_prefix=row.key_prefix,
         allowed_models=row.allowed_models,
+        apply_to_codex_model=row.apply_to_codex_model,
         enforced_model=row.enforced_model,
         enforced_reasoning_effort=row.enforced_reasoning_effort,
         enforced_service_tier=row.enforced_service_tier,
+        traffic_class=row.traffic_class,
         expires_at=row.expires_at,
         is_active=row.is_active,
         account_assignment_scope_enabled=row.account_assignment_scope_enabled,
@@ -68,6 +76,11 @@ def _to_response(row: ApiKeyData) -> ApiKeyResponse:
             if row.usage_summary is not None
             else None
         ),
+        pooled_remaining_percent_primary=(row.pooled_credits.remaining_percent_primary if row.pooled_credits else None),
+        pooled_remaining_percent_secondary=(
+            row.pooled_credits.remaining_percent_secondary if row.pooled_credits else None
+        ),
+        pooled_capacity_credits_primary=(row.pooled_credits.capacity_credits_primary if row.pooled_credits else 0.0),
     )
 
 
@@ -105,6 +118,7 @@ def _build_limit_inputs(payload: ApiKeyCreateRequest | ApiKeyUpdateRequest) -> l
 async def create_api_key(
     request: Request,
     payload: ApiKeyCreateRequest = Body(...),
+    _write_access=Depends(require_dashboard_write_access),
     context: ApiKeysContext = Depends(get_api_keys_context),
 ) -> ApiKeyCreateResponse:
     limit_inputs = _build_limit_inputs(payload)
@@ -114,14 +128,17 @@ async def create_api_key(
             ApiKeyCreateData(
                 name=payload.name,
                 allowed_models=payload.allowed_models,
+                apply_to_codex_model=payload.apply_to_codex_model,
                 enforced_model=payload.enforced_model,
                 enforced_reasoning_effort=payload.enforced_reasoning_effort,
                 enforced_service_tier=payload.enforced_service_tier,
+                traffic_class=payload.traffic_class or "foreground",
                 expires_at=payload.expires_at,
+                assigned_account_ids=payload.assigned_account_ids,
                 limits=limit_inputs,
             )
         )
-    except ValueError as exc:
+    except ApiKeyValidationError as exc:
         raise DashboardBadRequestError(str(exc), code="invalid_api_key_payload") from exc
     resp = _to_response(created)
     AuditService.log_async(
@@ -148,6 +165,7 @@ async def update_api_key(
     request: Request,
     key_id: str,
     payload: ApiKeyUpdateRequest = Body(...),
+    _write_access=Depends(require_dashboard_write_access),
     context: ApiKeysContext = Depends(get_api_keys_context),
 ) -> ApiKeyResponse:
     fields = payload.model_fields_set
@@ -160,12 +178,16 @@ async def update_api_key(
         name_set="name" in fields,
         allowed_models=payload.allowed_models,
         allowed_models_set="allowed_models" in fields,
+        apply_to_codex_model=payload.apply_to_codex_model,
+        apply_to_codex_model_set="apply_to_codex_model" in fields,
         enforced_model=payload.enforced_model,
         enforced_model_set="enforced_model" in fields,
         enforced_reasoning_effort=payload.enforced_reasoning_effort,
         enforced_reasoning_effort_set="enforced_reasoning_effort" in fields,
         enforced_service_tier=payload.enforced_service_tier,
         enforced_service_tier_set="enforced_service_tier" in fields,
+        traffic_class=payload.traffic_class,
+        traffic_class_set="traffic_class" in fields,
         expires_at=payload.expires_at,
         expires_at_set="expires_at" in fields,
         is_active=payload.is_active,
@@ -180,7 +202,7 @@ async def update_api_key(
         row = await context.service.update_key(key_id, update)
     except ApiKeyNotFoundError as exc:
         raise DashboardNotFoundError(str(exc)) from exc
-    except ValueError as exc:
+    except ApiKeyValidationError as exc:
         raise DashboardBadRequestError(str(exc), code="invalid_api_key_payload") from exc
     if "is_active" in fields and payload.is_active is False and row.is_active is False:
         AuditService.log_async(
@@ -195,6 +217,7 @@ async def update_api_key(
 async def delete_api_key(
     request: Request,
     key_id: str,
+    _write_access=Depends(require_dashboard_write_access),
     context: ApiKeysContext = Depends(get_api_keys_context),
 ) -> Response:
     try:
@@ -212,6 +235,7 @@ async def delete_api_key(
 @router.post("/{key_id}/regenerate", response_model=ApiKeyCreateResponse)
 async def regenerate_api_key(
     key_id: str,
+    _write_access=Depends(require_dashboard_write_access),
     context: ApiKeysContext = Depends(get_api_keys_context),
 ) -> ApiKeyCreateResponse:
     try:
@@ -256,4 +280,13 @@ async def get_api_key_usage_7d(
         total_cost_usd=result.total_cost_usd,
         total_requests=result.total_requests,
         cached_input_tokens=result.cached_input_tokens,
+        account_costs=[
+            ApiKeyAccountCostResponse(
+                account_id=ac.account_id,
+                email=ac.email,
+                cost_usd=ac.cost_usd,
+                is_deleted=ac.is_deleted,
+            )
+            for ac in result.account_costs
+        ],
     )

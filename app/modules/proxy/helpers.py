@@ -36,7 +36,7 @@ PLAN_TYPE_PRIORITY = (
 
 _RATE_LIMIT_CODES = frozenset({"rate_limit_exceeded", "usage_limit_reached"})
 _QUOTA_CODES = frozenset({"insufficient_quota", "usage_not_included", "quota_exceeded"})
-_TRANSIENT_CODES = frozenset({"server_error", "upstream_error", "stream_incomplete"})
+_TRANSIENT_CODES = frozenset({"server_error", "upstream_error", "stream_incomplete", "overloaded_error"})
 
 
 def classify_upstream_failure(
@@ -73,7 +73,11 @@ def _header_account_id(account_id: str | None) -> str | None:
 
 
 def _select_accounts_for_limits(accounts: Iterable[Account]) -> list[Account]:
-    return [account for account in accounts if account.status not in (AccountStatus.DEACTIVATED, AccountStatus.PAUSED)]
+    return [
+        account
+        for account in accounts
+        if account.status not in (AccountStatus.REAUTH_REQUIRED, AccountStatus.DEACTIVATED, AccountStatus.PAUSED)
+    ]
 
 
 def _summarize_window(
@@ -138,16 +142,21 @@ def _percent_to_int(value: float) -> int:
 def _rate_limit_details(
     primary: RateLimitWindowSnapshotData | None,
     secondary: RateLimitWindowSnapshotData | None,
+    monthly: RateLimitWindowSnapshotData | None = None,
+    *,
+    limit_reached: bool | None = None,
 ) -> RateLimitStatusDetailsData | None:
-    if not primary and not secondary:
+    if not primary and not secondary and not monthly:
         return None
-    used_percents = [window.used_percent for window in (primary, secondary) if window]
-    limit_reached = any(used >= 100 for used in used_percents)
+    if limit_reached is None:
+        used_percents = [window.used_percent for window in (primary, secondary, monthly) if window]
+        limit_reached = any(used >= 100 for used in used_percents)
     return RateLimitStatusDetailsData(
         allowed=not limit_reached,
         limit_reached=limit_reached,
         primary_window=primary,
         secondary_window=secondary,
+        monthly_window=monthly,
     )
 
 

@@ -8,7 +8,9 @@ import { useAccountQuotaDisplayStore } from "@/hooks/use-account-quota-display";
 describe("AccountList", () => {
   beforeEach(() => {
     useAccountQuotaDisplayStore.setState({ quotaDisplay: "both" });
-    vi.spyOn(Date, "now").mockReturnValue(new Date("2026-01-01T12:00:00.000Z").getTime());
+    vi.spyOn(Date, "now").mockReturnValue(
+      new Date("2026-01-01T12:00:00.000Z").getTime(),
+    );
   });
 
   afterEach(() => {
@@ -29,6 +31,7 @@ describe("AccountList", () => {
             planType: "plus",
             status: "active",
             eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
             additionalQuotas: [],
           },
           {
@@ -38,13 +41,14 @@ describe("AccountList", () => {
             planType: "pro",
             status: "paused",
             eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
             additionalQuotas: [],
           },
         ]}
         selectedAccountId="acc-1"
         platformIdentityRegistered={false}
         platformPrerequisiteSatisfied
-        onSelect={onSelect}
+                onSelect={onSelect}
         onOpenImport={() => {}}
         onOpenOauth={() => {}}
         onOpenPlatform={() => {}}
@@ -54,7 +58,10 @@ describe("AccountList", () => {
     expect(screen.getByText("primary@example.com")).toBeInTheDocument();
     expect(screen.getByText("secondary@example.com")).toBeInTheDocument();
 
-    await user.type(screen.getByPlaceholderText("Search accounts..."), "secondary");
+    await user.type(
+      screen.getByPlaceholderText("Search accounts..."),
+      "secondary",
+    );
     expect(screen.queryByText("primary@example.com")).not.toBeInTheDocument();
     expect(screen.getByText("secondary@example.com")).toBeInTheDocument();
 
@@ -74,11 +81,12 @@ describe("AccountList", () => {
             displayName: "Hidden Early",
             planType: "plus",
             status: "active",
+            eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
             usage: {
               primaryRemainingPercent: 42,
               secondaryRemainingPercent: 18,
             },
-            eligibleRouteFamilies: [],
             resetAtPrimary: "2026-01-01T12:05:00.000Z",
             resetAtSecondary: "2026-01-01T13:00:00.000Z",
             windowMinutesPrimary: 300,
@@ -91,11 +99,12 @@ describe("AccountList", () => {
             displayName: "Visible Early",
             planType: "plus",
             status: "active",
+            eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
             usage: {
               primaryRemainingPercent: 82,
               secondaryRemainingPercent: 73,
             },
-            eligibleRouteFamilies: [],
             resetAtPrimary: "2026-01-01T12:30:00.000Z",
             resetAtSecondary: "2026-01-01T12:10:00.000Z",
             windowMinutesPrimary: 300,
@@ -106,17 +115,18 @@ describe("AccountList", () => {
         selectedAccountId={null}
         platformIdentityRegistered={false}
         platformPrerequisiteSatisfied
-        onSelect={() => {}}
+                onSelect={() => {}}
         onOpenImport={() => {}}
         onOpenOauth={() => {}}
         onOpenPlatform={() => {}}
       />,
     );
 
-    expect(screen.getAllByText(/^(Hidden Early|Visible Early)$/).map((el) => el.textContent)).toEqual([
-      "Visible Early",
-      "Hidden Early",
-    ]);
+    expect(
+      screen
+        .getAllByText(/^(Hidden Early|Visible Early)$/)
+        .map((el) => el.textContent),
+    ).toEqual(["Visible Early", "Hidden Early"]);
   });
 
   it("ignores elapsed reset timestamps when sorting", () => {
@@ -129,11 +139,12 @@ describe("AccountList", () => {
             displayName: "Stale",
             planType: "plus",
             status: "active",
+            eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
             usage: {
               primaryRemainingPercent: 42,
               secondaryRemainingPercent: 18,
             },
-            eligibleRouteFamilies: [],
             resetAtPrimary: "2026-01-01T11:30:00.000Z",
             resetAtSecondary: "2026-01-01T11:45:00.000Z",
             windowMinutesPrimary: 300,
@@ -146,11 +157,12 @@ describe("AccountList", () => {
             displayName: "Fresh",
             planType: "plus",
             status: "active",
+            eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
             usage: {
               primaryRemainingPercent: 82,
               secondaryRemainingPercent: 73,
             },
-            eligibleRouteFamilies: [],
             resetAtPrimary: "2026-01-01T12:30:00.000Z",
             resetAtSecondary: "2026-01-01T12:20:00.000Z",
             windowMinutesPrimary: 300,
@@ -161,17 +173,16 @@ describe("AccountList", () => {
         selectedAccountId={null}
         platformIdentityRegistered={false}
         platformPrerequisiteSatisfied
-        onSelect={() => {}}
+                onSelect={() => {}}
         onOpenImport={() => {}}
         onOpenOauth={() => {}}
         onOpenPlatform={() => {}}
       />,
     );
 
-    expect(screen.getAllByText(/^(Fresh|Stale)$/).map((el) => el.textContent)).toEqual([
-      "Fresh",
-      "Stale",
-    ]);
+    expect(
+      screen.getAllByText(/^(Fresh|Stale)$/).map((el) => el.textContent),
+    ).toEqual(["Fresh", "Stale"]);
   });
 
   it("sorts legacy primary quota rows by their reset timestamp", () => {
@@ -184,11 +195,12 @@ describe("AccountList", () => {
             displayName: "Late",
             planType: "plus",
             status: "active",
+            eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
             usage: {
               primaryRemainingPercent: 42,
               secondaryRemainingPercent: null,
             },
-            eligibleRouteFamilies: [],
             resetAtPrimary: "2026-01-01T13:00:00.000Z",
             resetAtSecondary: null,
             windowMinutesPrimary: null,
@@ -201,11 +213,12 @@ describe("AccountList", () => {
             displayName: "Early",
             planType: "plus",
             status: "active",
+            eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
             usage: {
               primaryRemainingPercent: 82,
               secondaryRemainingPercent: null,
             },
-            eligibleRouteFamilies: [],
             resetAtPrimary: "2026-01-01T12:10:00.000Z",
             resetAtSecondary: null,
             windowMinutesPrimary: null,
@@ -216,16 +229,218 @@ describe("AccountList", () => {
         selectedAccountId={null}
         platformIdentityRegistered={false}
         platformPrerequisiteSatisfied
-        onSelect={() => {}}
+                onSelect={() => {}}
         onOpenImport={() => {}}
         onOpenOauth={() => {}}
         onOpenPlatform={() => {}}
       />,
     );
 
-    expect(screen.getAllByText(/^(Early|Late)$/).map((el) => el.textContent)).toEqual([
-      "Early",
-      "Late",
+    expect(
+      screen.getAllByText(/^(Early|Late)$/).map((el) => el.textContent),
+    ).toEqual(["Early", "Late"]);
+  });
+
+  it("sorts accounts by name", () => {
+    render(
+      <AccountList
+        accounts={[
+          {
+            accountId: "acc-z",
+            email: "z@example.com",
+            displayName: "Zeta",
+            planType: "pro",
+            status: "active",
+            eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
+            resetAtPrimary: "2026-01-01T12:30:00.000Z",
+            additionalQuotas: [],
+          },
+          {
+            accountId: "acc-a",
+            email: "a@example.com",
+            displayName: "Alpha",
+            planType: "plus",
+            status: "active",
+            eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
+            resetAtPrimary: "2026-01-01T12:10:00.000Z",
+            additionalQuotas: [],
+          },
+        ]}
+        selectedAccountId={null}
+        platformIdentityRegistered={false}
+        platformPrerequisiteSatisfied
+                onSelect={() => {}}
+        onOpenImport={() => {}}
+        onOpenOauth={() => {}}
+        onOpenPlatform={() => {}}
+        sortMode="name_asc"
+        onSortModeChange={() => {}}
+      />,
+    );
+
+    expect(screen.getAllByText(/^(Alpha|Zeta)$/).map((el) => el.textContent)).toEqual([
+      "Alpha",
+      "Zeta",
+    ]);
+  });
+
+  it("supports reverse name sorting", () => {
+    render(
+      <AccountList
+        accounts={[
+          {
+            accountId: "acc-b",
+            email: "b@example.com",
+            displayName: "Beta",
+            planType: "plus",
+            status: "active",
+            eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
+            resetAtPrimary: "2026-01-01T12:10:00.000Z",
+            additionalQuotas: [],
+          },
+          {
+            accountId: "acc-a",
+            email: "a@example.com",
+            displayName: "Alpha",
+            planType: "plus",
+            status: "active",
+            eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
+            resetAtPrimary: "2026-01-01T12:20:00.000Z",
+            additionalQuotas: [],
+          },
+        ]}
+        selectedAccountId={null}
+        platformIdentityRegistered={false}
+        platformPrerequisiteSatisfied
+                onSelect={() => {}}
+        onOpenImport={() => {}}
+        onOpenOauth={() => {}}
+        onOpenPlatform={() => {}}
+        sortMode="name_desc"
+        onSortModeChange={() => {}}
+      />,
+    );
+
+    expect(screen.getAllByText(/^(Alpha|Beta)$/).map((el) => el.textContent)).toEqual([
+      "Beta",
+      "Alpha",
+    ]);
+  });
+
+  it("can sort by latest reset first", () => {
+    render(
+      <AccountList
+        accounts={[
+          {
+            accountId: "acc-a",
+            email: "a@example.com",
+            displayName: "Alpha",
+            planType: "plus",
+            status: "active",
+            eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
+            resetAtPrimary: "2026-01-01T12:10:00.000Z",
+            additionalQuotas: [],
+          },
+          {
+            accountId: "acc-z",
+            email: "z@example.com",
+            displayName: "Zeta",
+            planType: "plus",
+            status: "active",
+            eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
+            resetAtPrimary: "2026-01-01T12:40:00.000Z",
+            additionalQuotas: [],
+          },
+        ]}
+        selectedAccountId={null}
+        platformIdentityRegistered={false}
+        platformPrerequisiteSatisfied
+                onSelect={() => {}}
+        onOpenImport={() => {}}
+        onOpenOauth={() => {}}
+        onOpenPlatform={() => {}}
+        sortMode="reset_latest"
+        onSortModeChange={() => {}}
+      />,
+    );
+
+    expect(screen.getAllByText(/^(Zeta|Alpha)$/).map((el) => el.textContent)).toEqual([
+      "Zeta",
+      "Alpha",
+    ]);
+  });
+
+  it("keeps unknown resets last when sorting by latest reset", () => {
+    render(
+      <AccountList
+        accounts={[
+          {
+            accountId: "acc-unknown",
+            email: "unknown@example.com",
+            displayName: "Unknown",
+            planType: "plus",
+            status: "active",
+            eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
+            additionalQuotas: [],
+          },
+          {
+            accountId: "acc-stale",
+            email: "stale@example.com",
+            displayName: "Stale",
+            planType: "plus",
+            status: "active",
+            eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
+            resetAtPrimary: "2026-01-01T11:30:00.000Z",
+            additionalQuotas: [],
+          },
+          {
+            accountId: "acc-latest",
+            email: "latest@example.com",
+            displayName: "Latest",
+            planType: "plus",
+            status: "active",
+            eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
+            resetAtPrimary: "2026-01-01T12:40:00.000Z",
+            additionalQuotas: [],
+          },
+          {
+            accountId: "acc-earlier",
+            email: "earlier@example.com",
+            displayName: "Earlier",
+            planType: "plus",
+            status: "active",
+            eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
+            resetAtPrimary: "2026-01-01T12:10:00.000Z",
+            additionalQuotas: [],
+          },
+        ]}
+        selectedAccountId={null}
+        platformIdentityRegistered={false}
+        platformPrerequisiteSatisfied
+                onSelect={() => {}}
+        onOpenImport={() => {}}
+        onOpenOauth={() => {}}
+        onOpenPlatform={() => {}}
+        sortMode="reset_latest"
+        onSortModeChange={() => {}}
+      />,
+    );
+
+    expect(screen.getAllByText(/^(Latest|Earlier|Stale|Unknown)$/).map((el) => el.textContent)).toEqual([
+      "Latest",
+      "Earlier",
+      "Stale",
+      "Unknown",
     ]);
   });
 
@@ -242,43 +457,126 @@ describe("AccountList", () => {
             planType: "plus",
             status: "active",
             eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
             additionalQuotas: [],
           },
         ]}
         selectedAccountId={null}
         platformIdentityRegistered={false}
         platformPrerequisiteSatisfied
-        onSelect={() => {}}
+                onSelect={() => {}}
         onOpenImport={() => {}}
         onOpenOauth={() => {}}
         onOpenPlatform={() => {}}
       />,
     );
 
-    await user.type(screen.getByPlaceholderText("Search accounts..."), "not-found");
+    await user.type(
+      screen.getByPlaceholderText("Search accounts..."),
+      "not-found",
+    );
     expect(screen.getByText("No matching accounts")).toBeInTheDocument();
   });
 
-  it("shows account id only for duplicate emails", () => {
+  it("keeps the add account action outside the scrollable account list", () => {
+    render(
+      <AccountList
+        accounts={[
+          {
+            accountId: "acc-1",
+            email: "primary@example.com",
+            displayName: "Primary",
+            planType: "plus",
+            status: "active",
+            eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
+            additionalQuotas: [],
+          },
+        ]}
+        selectedAccountId={null}
+        platformIdentityRegistered={false}
+        platformPrerequisiteSatisfied
+                onSelect={() => {}}
+        onOpenImport={() => {}}
+        onOpenOauth={() => {}}
+        onOpenPlatform={() => {}}
+      />,
+    );
+
+    const addAccountButton = screen.getByRole("button", { name: "Add account" });
+    const scrollRegion = screen.getByTestId("account-list-scroll-region");
+
+    expect(scrollRegion).not.toContainElement(addAccountButton);
+  });
+
+  it("filters re-auth required accounts by status", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AccountList
+        accounts={[
+          {
+            accountId: "acc-active",
+            email: "active@example.com",
+            displayName: "Active",
+            planType: "plus",
+            status: "active",
+            eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
+            additionalQuotas: [],
+          },
+          {
+            accountId: "acc-reauth",
+            email: "reauth@example.com",
+            displayName: "Needs Reauth",
+            planType: "pro",
+            status: "reauth_required",
+            eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
+            additionalQuotas: [],
+          },
+        ]}
+        selectedAccountId={null}
+        platformIdentityRegistered={false}
+        platformPrerequisiteSatisfied
+                onSelect={() => {}}
+        onOpenImport={() => {}}
+        onOpenOauth={() => {}}
+        onOpenPlatform={() => {}}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Filter accounts by status" }));
+    await user.click(screen.getByRole("option", { name: "Reauth required" }));
+
+    expect(screen.queryByText("active@example.com")).not.toBeInTheDocument();
+    expect(screen.getByText("reauth@example.com")).toBeInTheDocument();
+  });
+
+  it("uses the backend duplicate indicator instead of recomputing by email", () => {
     render(
       <AccountList
         accounts={[
           {
             accountId: "d48f0bfc-8ea6-48a7-8d76-d0e5ef1816c5_6f12b5d5",
             email: "dup@example.com",
-            displayName: "Duplicate A",
+            displayName: "Same email, different workspace",
             planType: "plus",
             status: "active",
             eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
+            isEmailDuplicate: false,
             additionalQuotas: [],
           },
           {
             accountId: "7f9de2ad-7621-4a6f-88bc-ec7f3d914701_91a95cee",
             email: "dup@example.com",
-            displayName: "Duplicate B",
+            displayName: "Same email, duplicate slot",
             planType: "plus",
             status: "active",
             eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
+            isEmailDuplicate: true,
             additionalQuotas: [],
           },
           {
@@ -288,23 +586,45 @@ describe("AccountList", () => {
             planType: "pro",
             status: "active",
             eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
             additionalQuotas: [],
           },
         ]}
         selectedAccountId={null}
         platformIdentityRegistered={false}
         platformPrerequisiteSatisfied
-        onSelect={() => {}}
+                onSelect={() => {}}
         onOpenImport={() => {}}
         onOpenOauth={() => {}}
         onOpenPlatform={() => {}}
       />,
     );
 
-    expect(screen.getByText((_content, el) => el?.tagName === "P" && !!el.textContent?.match(/dup@example\.com \| ID d48f0bfc\.\.\.12b5d5/))).toBeInTheDocument();
-    expect(screen.getByText((_content, el) => el?.tagName === "P" && !!el.textContent?.match(/dup@example\.com \| ID 7f9de2ad\.\.\.a95cee/))).toBeInTheDocument();
-    expect(screen.getByText("unique@example.com")).toBeInTheDocument();
-    expect(screen.queryByText((_content, el) => el?.tagName === "P" && !!el.textContent?.match(/unique@example\.com \| ID/))).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        (_content, el) =>
+          el?.tagName === "P" &&
+          !!el.textContent?.match(
+            /dup@example\.com .* ID d48f0bfc\.\.\.12b5d5/,
+          ),
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        (_content, el) =>
+          el?.tagName === "P" &&
+          !!el.textContent?.match(
+            /dup@example\.com .* ID 7f9de2ad\.\.\.a95cee/,
+          ),
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        (_content, el) =>
+          el?.tagName === "P" &&
+          !!el.textContent?.match(/unique@example\.com \| ID/),
+      ),
+    ).not.toBeInTheDocument();
   });
 
   it("opens the platform dialog from the list toolbar", async () => {
@@ -324,11 +644,11 @@ describe("AccountList", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Add API Key" }));
+    await user.click(screen.getByRole("button", { name: "Add API key" }));
     expect(onOpenPlatform).toHaveBeenCalledTimes(1);
   });
 
-  it("disables Add API Key when a platform identity is already registered", () => {
+  it("disables Add API key when a platform identity is already registered", () => {
     render(
       <AccountList
         accounts={[]}
@@ -342,7 +662,7 @@ describe("AccountList", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Add API Key" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Add API key" })).toBeDisabled();
     expect(
       screen.getByText("A Platform fallback key is already registered. Phase 1 allows only one."),
     ).toBeInTheDocument();
@@ -363,6 +683,7 @@ describe("AccountList", () => {
             providerKind: "openai_platform",
             routingSubjectId: "subject-platform-1",
             eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
             additionalQuotas: [],
           },
           {
@@ -372,6 +693,7 @@ describe("AccountList", () => {
             planType: "pro",
             status: "active",
             eligibleRouteFamilies: [],
+            limitWarmupEnabled: false,
             additionalQuotas: [],
           },
         ]}
@@ -391,7 +713,7 @@ describe("AccountList", () => {
     expect(screen.queryByText("secondary@example.com")).not.toBeInTheDocument();
   });
 
-  it("disables Add API Key until an active ChatGPT account exists", () => {
+  it("disables Add API key until an active ChatGPT account exists", () => {
     render(
       <AccountList
         accounts={[]}
@@ -405,7 +727,7 @@ describe("AccountList", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Add API Key" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Add API key" })).toBeDisabled();
     expect(
       screen.getByText("Add or reactivate a ChatGPT account before registering a Platform fallback key."),
     ).toBeInTheDocument();

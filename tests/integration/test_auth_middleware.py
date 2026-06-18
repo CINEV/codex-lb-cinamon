@@ -88,6 +88,96 @@ def _set_proxy_unauthenticated_client_cidrs_env(
     get_settings.cache_clear()
 
 
+async def _enable_guest_access(client: AsyncClient) -> dict[str, object]:
+    read_settings = await client.get("/api/settings")
+    assert read_settings.status_code == 200
+    current = read_settings.json()
+    assert isinstance(current, dict)
+    current["guestAccessEnabled"] = True
+
+    response = await client.put("/api/settings", json=current)
+    assert response.status_code == 200
+    payload = response.json()
+    assert isinstance(payload, dict)
+    assert payload["guestAccessEnabled"] is True
+    return payload
+
+
+async def _assert_guest_write_denied(client: AsyncClient) -> None:
+    read_settings = await client.get("/api/settings")
+    assert read_settings.status_code == 200
+    payload = read_settings.json()
+    assert isinstance(payload, dict)
+    payload["guestAccessEnabled"] = False
+
+    blocked_update = await client.put("/api/settings", json=payload)
+    assert blocked_update.status_code == 403
+    assert blocked_update.json()["error"]["code"] == "read_only_access"
+
+    blocked_export = await client.post("/api/accounts/missing/export")
+    assert blocked_export.status_code == 403
+    assert blocked_export.json()["error"]["code"] == "read_only_access"
+
+    blocked_auth_export = await client.post("/api/accounts/missing/export/auth")
+    assert blocked_auth_export.status_code == 403
+    assert blocked_auth_export.json()["error"]["code"] == "read_only_access"
+
+    blocked_opencode_export = await client.post("/api/accounts/missing/export/opencode-auth")
+    assert blocked_opencode_export.status_code == 403
+    assert blocked_opencode_export.json()["error"]["code"] == "read_only_access"
+
+    blocked_alias = await client.put("/api/accounts/missing/alias", json={"alias": "Guest Alias"})
+    assert blocked_alias.status_code == 403
+    assert blocked_alias.json()["error"]["code"] == "read_only_access"
+
+    blocked_limit_warmup = await client.put("/api/accounts/missing/limit-warmup", json={"enabled": True})
+    assert blocked_limit_warmup.status_code == 403
+    assert blocked_limit_warmup.json()["error"]["code"] == "read_only_access"
+
+    blocked_proxy_endpoint = await client.post(
+        "/api/settings/upstream-proxy/endpoints",
+        json={"name": "Guest Proxy", "scheme": "http", "host": "proxy.internal", "port": 8080},
+    )
+    assert blocked_proxy_endpoint.status_code == 403
+    assert blocked_proxy_endpoint.json()["error"]["code"] == "read_only_access"
+
+    blocked_proxy_pool = await client.post(
+        "/api/settings/upstream-proxy/pools",
+        json={"name": "Guest Pool", "endpointIds": []},
+    )
+    assert blocked_proxy_pool.status_code == 403
+    assert blocked_proxy_pool.json()["error"]["code"] == "read_only_access"
+
+    blocked_proxy_member = await client.post(
+        "/api/settings/upstream-proxy/pools/missing-pool/members",
+        json={"endpointId": "missing-endpoint"},
+    )
+    assert blocked_proxy_member.status_code == 403
+    assert blocked_proxy_member.json()["error"]["code"] == "read_only_access"
+
+    blocked_proxy_binding = await client.put(
+        "/api/settings/upstream-proxy/accounts/missing-account/binding",
+        json={"poolId": "missing-pool", "isActive": True},
+    )
+    assert blocked_proxy_binding.status_code == 403
+    assert blocked_proxy_binding.json()["error"]["code"] == "read_only_access"
+
+    blocked_quota_planner_settings = await client.put("/api/quota-planner/settings", json={"mode": "shadow"})
+    assert blocked_quota_planner_settings.status_code == 403
+    assert blocked_quota_planner_settings.json()["error"]["code"] == "read_only_access"
+
+    blocked_quota_planner_warm_now = await client.post(
+        "/api/quota-planner/warm-now",
+        json={"accountId": "missing", "forceProbe": False},
+    )
+    assert blocked_quota_planner_warm_now.status_code == 403
+    assert blocked_quota_planner_warm_now.json()["error"]["code"] == "read_only_access"
+
+    blocked_quota_planner_cancel = await client.post("/api/quota-planner/decisions/missing/cancel")
+    assert blocked_quota_planner_cancel.status_code == 403
+    assert blocked_quota_planner_cancel.json()["error"]["code"] == "read_only_access"
+
+
 @pytest.mark.asyncio
 async def test_session_branch_allows_without_password_and_blocks_without_session(async_client):
     public_mode = await async_client.get("/api/settings")
@@ -226,138 +316,53 @@ async def test_remote_first_run_requires_bootstrap_token(app_instance, monkeypat
 
 
 @pytest.mark.asyncio
-async def test_remote_insecure_no_auth_bypasses_dashboard_and_proxy_auth(app_instance, monkeypatch):
-    monkeypatch.setenv("CODEX_LB_INSECURE_ALLOW_REMOTE_NO_AUTH", "true")
-    monkeypatch.setenv("CODEX_LB_INSECURE_ALLOW_REMOTE_NO_AUTH_HOST_CIDRS", "10.0.0.12/32")
-    from app.core.config.settings import get_settings
-    from app.core.config.settings_cache import get_settings_cache
-
-    get_settings.cache_clear()
-    await get_settings_cache().invalidate()
-
+async def test_passwordless_guest_access_allows_remote_reads_and_blocks_writes(app_instance):
     async with app_instance.router.lifespan_context(app_instance):
-        transport = ASGITransport(app=app_instance, client=("10.0.0.12", 50002))
-        async with AsyncClient(transport=transport, base_url="http://lb.example") as remote_client:
+        local_transport = ASGITransport(app=app_instance, client=("127.0.0.1", 50000))
+        async with AsyncClient(transport=local_transport, base_url="http://localhost") as local_client:
+            enabled_settings = await _enable_guest_access(local_client)
+            assert enabled_settings["guestPasswordConfigured"] is False
+
+        remote_transport = ASGITransport(app=app_instance, client=("203.0.113.20", 50001))
+        async with AsyncClient(transport=remote_transport, base_url="http://lb.example") as remote_client:
             session = await remote_client.get("/api/dashboard-auth/session")
             assert session.status_code == 200
-            payload = session.json()
-            assert payload["authenticated"] is True
-            assert payload["bootstrapRequired"] is False
-            assert payload["totpRequiredOnLogin"] is False
+            session_payload = session.json()
+            assert session_payload["authenticated"] is True
+            assert session_payload["role"] == "guest"
+            assert session_payload["permissions"] == ["read"]
+            assert session_payload["guestAccessEnabled"] is True
+            assert session_payload["guestPasswordRequired"] is False
 
-            protected_settings = await remote_client.get("/api/settings")
-            assert protected_settings.status_code == 200
+            await _assert_guest_write_denied(remote_client)
 
-            current_settings = protected_settings.json()
-            updated_settings = await remote_client.put(
-                "/api/settings",
-                json={
-                    "stickyThreadsEnabled": current_settings["stickyThreadsEnabled"],
-                    "preferEarlierResetAccounts": current_settings["preferEarlierResetAccounts"],
-                    "upstreamStreamTransport": current_settings["upstreamStreamTransport"],
-                    "routingStrategy": current_settings["routingStrategy"],
-                    "openaiCacheAffinityMaxAgeSeconds": current_settings["openaiCacheAffinityMaxAgeSeconds"],
-                    "httpResponsesSessionBridgePromptCacheIdleTtlSeconds": current_settings[
-                        "httpResponsesSessionBridgePromptCacheIdleTtlSeconds"
-                    ],
-                    "httpResponsesSessionBridgeGatewaySafeMode": current_settings[
-                        "httpResponsesSessionBridgeGatewaySafeMode"
-                    ],
-                    "stickyReallocationBudgetThresholdPct": current_settings["stickyReallocationBudgetThresholdPct"],
-                    "importWithoutOverwrite": current_settings["importWithoutOverwrite"],
-                    "totpRequiredOnLogin": current_settings["totpRequiredOnLogin"],
-                    "apiKeyAuthEnabled": current_settings["apiKeyAuthEnabled"],
-                },
-            )
-            assert updated_settings.status_code == 200
+            passwordless_login = await remote_client.post("/api/dashboard-auth/guest/login", json={})
+            assert passwordless_login.status_code == 200
+            assert passwordless_login.json()["role"] == "guest"
 
-            oauth_status = await remote_client.get("/api/oauth/status")
-            assert oauth_status.status_code == 200
+            async with AsyncClient(transport=local_transport, base_url="http://localhost") as local_client:
+                set_password = await local_client.post(
+                    "/api/dashboard-auth/guest/password",
+                    json={"password": "guest-password-123"},
+                )
+                assert set_password.status_code == 200
 
-            models = await remote_client.get("/v1/models")
-            assert models.status_code == 200
+            stale_session = await remote_client.get("/api/dashboard-auth/session")
+            assert stale_session.status_code == 200
+            stale_payload = stale_session.json()
+            assert stale_payload["authenticated"] is False
+            assert stale_payload["guestAccessEnabled"] is True
+            assert stale_payload["guestPasswordRequired"] is True
+
+            blocked_read = await remote_client.get("/api/settings")
+            assert blocked_read.status_code == 401
+            assert blocked_read.json()["error"]["code"] == "authentication_required"
 
 
 @pytest.mark.asyncio
-async def test_podman_localhost_host_header_bypasses_bootstrap_and_proxy_auth(app_instance, monkeypatch):
-    monkeypatch.setenv("CODEX_LB_INSECURE_ALLOW_REMOTE_NO_AUTH", "true")
-    monkeypatch.delenv("CODEX_LB_INSECURE_ALLOW_REMOTE_NO_AUTH_HOST_CIDRS", raising=False)
-    monkeypatch.setattr(
-        request_locality,
-        "_auto_detect_host_gateway_networks",
-        lambda: (ip_network("10.88.0.0/24"),),
-    )
-    from app.core.config.settings import get_settings
-    from app.core.config.settings_cache import get_settings_cache
-
-    get_settings.cache_clear()
-    await get_settings_cache().invalidate()
-
+async def test_passwordless_guest_access_does_not_shadow_admin_session(app_instance):
     async with app_instance.router.lifespan_context(app_instance):
-        transport = ASGITransport(app=app_instance, client=("10.88.0.176", 50002))
-        async with AsyncClient(transport=transport, base_url="http://localhost:2455") as remote_client:
-            session = await remote_client.get("/api/dashboard-auth/session")
-            assert session.status_code == 200
-            payload = session.json()
-            assert payload["authenticated"] is True
-            assert payload["bootstrapRequired"] is False
-
-            protected_settings = await remote_client.get("/api/settings")
-            assert protected_settings.status_code == 200
-
-            oauth_status = await remote_client.get("/api/oauth/status")
-            assert oauth_status.status_code == 200
-
-            models = await remote_client.get("/v1/models")
-            assert models.status_code == 200
-
-
-@pytest.mark.asyncio
-async def test_public_remote_insecure_no_auth_does_not_bypass_dashboard_or_proxy(app_instance, monkeypatch):
-    monkeypatch.setenv("CODEX_LB_INSECURE_ALLOW_REMOTE_NO_AUTH", "true")
-    monkeypatch.setenv("CODEX_LB_INSECURE_ALLOW_REMOTE_NO_AUTH_HOST_CIDRS", "10.0.0.12/32")
-    from app.core.config.settings import get_settings
-    from app.core.config.settings_cache import get_settings_cache
-
-    get_settings.cache_clear()
-    await get_settings_cache().invalidate()
-
-    async with app_instance.router.lifespan_context(app_instance):
-        transport = ASGITransport(app=app_instance, client=("10.0.0.99", 50002))
-        async with AsyncClient(transport=transport, base_url="http://lb.example") as remote_client:
-            session = await remote_client.get("/api/dashboard-auth/session")
-            assert session.status_code == 200
-            assert session.json()["authenticated"] is False
-            assert session.json()["bootstrapRequired"] is True
-
-            spoofed = await remote_client.get("/api/settings", headers={"Host": "localhost"})
-            assert spoofed.status_code == 401
-            assert spoofed.json()["error"]["code"] == "bootstrap_required"
-
-            protected_settings = await remote_client.get("/api/settings")
-            assert protected_settings.status_code == 401
-            assert protected_settings.json()["error"]["code"] == "bootstrap_required"
-
-            models = await remote_client.get("/v1/models")
-            assert models.status_code == 401
-            assert models.json()["error"]["code"] == "invalid_api_key"
-
-
-@pytest.mark.asyncio
-async def test_private_insecure_no_auth_requires_session_after_password_setup(
-    app_instance,
-    monkeypatch,
-):
-    monkeypatch.setenv("CODEX_LB_INSECURE_ALLOW_REMOTE_NO_AUTH", "true")
-    monkeypatch.setenv("CODEX_LB_INSECURE_ALLOW_REMOTE_NO_AUTH_HOST_CIDRS", "10.0.0.13/32")
-    from app.core.config.settings import get_settings
-    from app.core.config.settings_cache import get_settings_cache
-
-    get_settings.cache_clear()
-    await get_settings_cache().invalidate()
-
-    async with app_instance.router.lifespan_context(app_instance):
-        local_transport = ASGITransport(app=app_instance, client=("127.0.0.1", 50003))
+        local_transport = ASGITransport(app=app_instance, client=("127.0.0.1", 50000))
         async with AsyncClient(transport=local_transport, base_url="http://localhost") as local_client:
             setup = await local_client.post(
                 "/api/dashboard-auth/password/setup",
@@ -365,20 +370,96 @@ async def test_private_insecure_no_auth_requires_session_after_password_setup(
             )
             assert setup.status_code == 200
 
-            logout = await local_client.post("/api/dashboard-auth/logout", json={})
-            assert logout.status_code == 200
+            await _enable_guest_access(local_client)
 
-        transport = ASGITransport(app=app_instance, client=("10.0.0.13", 50004))
-        async with AsyncClient(transport=transport, base_url="http://lb.example") as remote_client:
+        remote_transport = ASGITransport(app=app_instance, client=("203.0.113.22", 50001))
+        async with AsyncClient(transport=remote_transport, base_url="http://lb.example") as remote_client:
+            public_session = await remote_client.get("/api/dashboard-auth/session")
+            assert public_session.status_code == 200
+            assert public_session.json()["role"] == "guest"
+
+            login = await remote_client.post(
+                "/api/dashboard-auth/password/login",
+                json={"password": "password123"},
+            )
+            assert login.status_code == 200
+            login_payload = login.json()
+            assert login_payload["authenticated"] is True
+            assert login_payload["role"] == "admin"
+            assert login_payload["permissions"] == ["read", "write"]
+
+            admin_settings = await remote_client.get("/api/settings")
+            assert admin_settings.status_code == 200
+            update_payload = admin_settings.json()
+            update_payload["guestAccessEnabled"] = False
+            update = await remote_client.put("/api/settings", json=update_payload)
+            assert update.status_code == 200
+            assert update.json()["guestAccessEnabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_guest_password_login_allows_remote_reads_and_blocks_writes(app_instance):
+    async with app_instance.router.lifespan_context(app_instance):
+        local_transport = ASGITransport(app=app_instance, client=("127.0.0.1", 50000))
+        async with AsyncClient(transport=local_transport, base_url="http://localhost") as local_client:
+            await _enable_guest_access(local_client)
+
+            set_password = await local_client.post(
+                "/api/dashboard-auth/guest/password",
+                json={"password": "guest-password-123"},
+            )
+            assert set_password.status_code == 200
+
+            settings_after_password = await local_client.get("/api/settings")
+            assert settings_after_password.json()["guestPasswordConfigured"] is True
+
+        remote_transport = ASGITransport(app=app_instance, client=("203.0.113.21", 50001))
+        async with AsyncClient(transport=remote_transport, base_url="http://lb.example") as remote_client:
             session = await remote_client.get("/api/dashboard-auth/session")
             assert session.status_code == 200
-            assert session.json()["authenticated"] is False
+            session_payload = session.json()
+            assert session_payload["authenticated"] is False
+            assert session_payload["guestAccessEnabled"] is True
+            assert session_payload["guestPasswordRequired"] is True
 
-            blocked = await remote_client.get("/api/settings")
-            assert blocked.status_code == 401
-            assert blocked.json()["error"]["code"] == "authentication_required"
+            blocked_read = await remote_client.get("/api/settings")
+            assert blocked_read.status_code == 401
+            assert blocked_read.json()["error"]["code"] == "authentication_required"
+
+            bad_login = await remote_client.post(
+                "/api/dashboard-auth/guest/login",
+                json={"password": "wrong-password"},
+            )
+            assert bad_login.status_code == 401
+            assert bad_login.json()["error"]["code"] == "invalid_credentials"
+
+            login = await remote_client.post(
+                "/api/dashboard-auth/guest/login",
+                json={"password": "guest-password-123"},
+            )
+            assert login.status_code == 200
+            login_payload = login.json()
+            assert login_payload["authenticated"] is True
+            assert login_payload["role"] == "guest"
+            assert login_payload["permissions"] == ["read"]
+
+            refresh = await remote_client.get("/api/dashboard-auth/session")
+            assert refresh.status_code == 200
+            refresh_payload = refresh.json()
+            assert refresh_payload["authenticated"] is True
+            assert refresh_payload["role"] == "guest"
+            assert refresh_payload["permissions"] == ["read"]
+            assert refresh_payload["guestAccessEnabled"] is True
+            assert refresh_payload["guestPasswordRequired"] is True
+
+            await _assert_guest_write_denied(remote_client)
+
+            totp_setup = await remote_client.post("/api/dashboard-auth/totp/setup/start", json={})
+            assert totp_setup.status_code == 401
+            assert totp_setup.json()["error"]["code"] == "authentication_required"
 
 
+@pytest.mark.asyncio
 async def test_trusted_header_mode_requires_proxy_header_for_open_dashboard(async_client, monkeypatch):
     _set_dashboard_auth_env(
         monkeypatch,
@@ -398,11 +479,148 @@ async def test_trusted_header_mode_requires_proxy_header_for_open_dashboard(asyn
         "authMode": "trusted_header",
         "passwordManagementEnabled": True,
         "passwordSessionActive": False,
+        "role": "admin",
+        "permissions": ["read", "write"],
+        "guestAccessEnabled": False,
+        "guestPasswordRequired": False,
     }
 
     blocked = await async_client.get("/api/settings")
     assert blocked.status_code == 401
     assert blocked.json()["error"]["code"] == "proxy_auth_required"
+
+
+@pytest.mark.asyncio
+async def test_trusted_header_mode_rejects_guest_login_without_proxy_header(async_client, monkeypatch):
+    _set_dashboard_auth_env(
+        monkeypatch,
+        mode=DashboardAuthMode.TRUSTED_HEADER,
+        trust_proxy_headers=True,
+    )
+
+    proxy_headers = {"Remote-User": "admin@example.com"}
+    read_settings = await async_client.get("/api/settings", headers=proxy_headers)
+    assert read_settings.status_code == 200
+    current = read_settings.json()
+    current["guestAccessEnabled"] = True
+    enabled_settings = await async_client.put("/api/settings", json=current, headers=proxy_headers)
+    assert enabled_settings.status_code == 200
+    assert enabled_settings.json()["guestPasswordConfigured"] is False
+
+    blocked = await async_client.post("/api/dashboard-auth/guest/login", json={})
+    assert blocked.status_code == 401
+    assert blocked.json()["error"]["code"] == "proxy_auth_required"
+
+    configured_password = await async_client.post(
+        "/api/dashboard-auth/guest/password",
+        json={"password": "guest-password-123"},
+        headers=proxy_headers,
+    )
+    assert configured_password.status_code == 200
+
+    blocked_password_login = await async_client.post(
+        "/api/dashboard-auth/guest/login",
+        json={"password": "guest-password-123"},
+    )
+    assert blocked_password_login.status_code == 401
+    assert blocked_password_login.json()["error"]["code"] == "proxy_auth_required"
+
+
+@pytest.mark.asyncio
+async def test_trusted_header_mode_blocks_passwordless_guest_without_proxy_header_when_fallback_exists(
+    app_instance,
+    monkeypatch,
+):
+    _set_dashboard_auth_env(
+        monkeypatch,
+        mode=DashboardAuthMode.TRUSTED_HEADER,
+        trust_proxy_headers=True,
+    )
+
+    async with app_instance.router.lifespan_context(app_instance):
+        proxy_headers = {"Remote-User": "admin@example.com"}
+        local_transport = ASGITransport(app=app_instance, client=("127.0.0.1", 50000))
+        async with AsyncClient(transport=local_transport, base_url="http://localhost") as local_client:
+            setup = await local_client.post(
+                "/api/dashboard-auth/password/setup",
+                json={"password": "password123"},
+                headers=proxy_headers,
+            )
+            assert setup.status_code == 200
+
+            read_settings = await local_client.get("/api/settings", headers=proxy_headers)
+            assert read_settings.status_code == 200
+            current = read_settings.json()
+            current["guestAccessEnabled"] = True
+            enabled_settings = await local_client.put(
+                "/api/settings",
+                json=current,
+                headers=proxy_headers,
+            )
+            assert enabled_settings.status_code == 200
+            assert enabled_settings.json()["guestPasswordConfigured"] is False
+
+        remote_transport = ASGITransport(app=app_instance, client=("203.0.113.24", 50001))
+        async with AsyncClient(transport=remote_transport, base_url="http://lb.example") as remote_client:
+            session = await remote_client.get("/api/dashboard-auth/session")
+            assert session.status_code == 200
+            session_payload = session.json()
+            assert session_payload["authenticated"] is False
+            assert session_payload["role"] == "admin"
+            assert session_payload["permissions"] == ["read", "write"]
+            assert session_payload["guestAccessEnabled"] is True
+            assert session_payload["guestPasswordRequired"] is False
+            assert session_payload["authMode"] == "trusted_header"
+
+            blocked = await remote_client.get("/api/settings")
+            assert blocked.status_code == 401
+            assert blocked.json()["error"]["code"] == "proxy_auth_required"
+
+
+@pytest.mark.asyncio
+async def test_trusted_header_mode_blocks_passwordless_guest_login_on_proxied_local_backend_without_auth_header(
+    app_instance,
+    monkeypatch,
+):
+    _set_dashboard_auth_env(
+        monkeypatch,
+        mode=DashboardAuthMode.TRUSTED_HEADER,
+        trust_proxy_headers=True,
+    )
+
+    async with app_instance.router.lifespan_context(app_instance):
+        local_transport = ASGITransport(app=app_instance, client=("127.0.0.1", 50000))
+        proxy_headers = {"Remote-User": "admin@example.com"}
+        async with AsyncClient(transport=local_transport, base_url="http://localhost") as local_client:
+            setup = await local_client.post(
+                "/api/dashboard-auth/password/setup",
+                json={"password": "password123"},
+                headers=proxy_headers,
+            )
+            assert setup.status_code == 200
+
+            read_settings = await local_client.get("/api/settings", headers=proxy_headers)
+            assert read_settings.status_code == 200
+            current = read_settings.json()
+            current["guestAccessEnabled"] = True
+            enabled_settings = await local_client.put(
+                "/api/settings",
+                json=current,
+                headers=proxy_headers,
+            )
+            assert enabled_settings.status_code == 200
+            assert enabled_settings.json()["guestPasswordConfigured"] is False
+
+        direct_transport = ASGITransport(app=app_instance, client=("127.0.0.1", 50001))
+        proxied_headers = {"X-Forwarded-For": "203.0.113.24"}
+        async with AsyncClient(transport=direct_transport, base_url="http://localhost") as direct_client:
+            guest_login = await direct_client.post(
+                "/api/dashboard-auth/guest/login",
+                json={},
+                headers=proxied_headers,
+            )
+            assert guest_login.status_code == 401
+            assert guest_login.json()["error"]["code"] == "proxy_auth_required"
 
 
 @pytest.mark.asyncio
@@ -440,7 +658,7 @@ async def test_trusted_header_mode_allows_proxy_header_and_password_fallback(asy
     async_client.cookies.clear()
     blocked = await async_client.get("/api/settings")
     assert blocked.status_code == 401
-    assert blocked.json()["error"]["code"] == "authentication_required"
+    assert blocked.json()["error"]["code"] == "proxy_auth_required"
 
     fallback_login = await async_client.post(
         "/api/dashboard-auth/password/login",
@@ -469,6 +687,10 @@ async def test_disabled_dashboard_auth_mode_bypasses_guard_and_disables_password
         "authMode": "disabled",
         "passwordManagementEnabled": False,
         "passwordSessionActive": False,
+        "role": "admin",
+        "permissions": ["read", "write"],
+        "guestAccessEnabled": False,
+        "guestPasswordRequired": False,
     }
 
     allowed = await async_client.get("/api/settings")
@@ -763,3 +985,160 @@ async def test_codex_usage_blocks_unregistered_chatgpt_account_id(async_client, 
     )
     assert blocked.status_code == 401
     assert blocked.json()["error"]["code"] == "invalid_api_key"
+
+
+# Fork-specific insecure remote no-auth locality coverage preserved during upstream merge.
+
+
+@pytest.mark.asyncio
+async def test_remote_insecure_no_auth_bypasses_dashboard_and_proxy_auth(app_instance, monkeypatch):
+    monkeypatch.setenv("CODEX_LB_INSECURE_ALLOW_REMOTE_NO_AUTH", "true")
+    monkeypatch.setenv("CODEX_LB_INSECURE_ALLOW_REMOTE_NO_AUTH_HOST_CIDRS", "10.0.0.12/32")
+    from app.core.config.settings import get_settings
+    from app.core.config.settings_cache import get_settings_cache
+
+    get_settings.cache_clear()
+    await get_settings_cache().invalidate()
+
+    async with app_instance.router.lifespan_context(app_instance):
+        transport = ASGITransport(app=app_instance, client=("10.0.0.12", 50002))
+        async with AsyncClient(transport=transport, base_url="http://lb.example") as remote_client:
+            session = await remote_client.get("/api/dashboard-auth/session")
+            assert session.status_code == 200
+            payload = session.json()
+            assert payload["authenticated"] is True
+            assert payload["bootstrapRequired"] is False
+            assert payload["totpRequiredOnLogin"] is False
+
+            protected_settings = await remote_client.get("/api/settings")
+            assert protected_settings.status_code == 200
+
+            current_settings = protected_settings.json()
+            updated_settings = await remote_client.put(
+                "/api/settings",
+                json={
+                    "stickyThreadsEnabled": current_settings["stickyThreadsEnabled"],
+                    "preferEarlierResetAccounts": current_settings["preferEarlierResetAccounts"],
+                    "upstreamStreamTransport": current_settings["upstreamStreamTransport"],
+                    "routingStrategy": current_settings["routingStrategy"],
+                    "openaiCacheAffinityMaxAgeSeconds": current_settings["openaiCacheAffinityMaxAgeSeconds"],
+                    "httpResponsesSessionBridgePromptCacheIdleTtlSeconds": current_settings[
+                        "httpResponsesSessionBridgePromptCacheIdleTtlSeconds"
+                    ],
+                    "httpResponsesSessionBridgeGatewaySafeMode": current_settings[
+                        "httpResponsesSessionBridgeGatewaySafeMode"
+                    ],
+                    "stickyReallocationBudgetThresholdPct": current_settings["stickyReallocationBudgetThresholdPct"],
+                    "importWithoutOverwrite": current_settings["importWithoutOverwrite"],
+                    "totpRequiredOnLogin": current_settings["totpRequiredOnLogin"],
+                    "apiKeyAuthEnabled": current_settings["apiKeyAuthEnabled"],
+                },
+            )
+            assert updated_settings.status_code == 200
+
+            oauth_status = await remote_client.get("/api/oauth/status")
+            assert oauth_status.status_code == 200
+
+            models = await remote_client.get("/v1/models")
+            assert models.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_podman_localhost_host_header_bypasses_bootstrap_and_proxy_auth(app_instance, monkeypatch):
+    monkeypatch.setenv("CODEX_LB_INSECURE_ALLOW_REMOTE_NO_AUTH", "true")
+    monkeypatch.delenv("CODEX_LB_INSECURE_ALLOW_REMOTE_NO_AUTH_HOST_CIDRS", raising=False)
+    monkeypatch.setattr(
+        request_locality,
+        "_auto_detect_host_gateway_networks",
+        lambda: (ip_network("10.88.0.0/24"),),
+    )
+    from app.core.config.settings import get_settings
+    from app.core.config.settings_cache import get_settings_cache
+
+    get_settings.cache_clear()
+    await get_settings_cache().invalidate()
+
+    async with app_instance.router.lifespan_context(app_instance):
+        transport = ASGITransport(app=app_instance, client=("10.88.0.176", 50002))
+        async with AsyncClient(transport=transport, base_url="http://localhost:2455") as remote_client:
+            session = await remote_client.get("/api/dashboard-auth/session")
+            assert session.status_code == 200
+            payload = session.json()
+            assert payload["authenticated"] is True
+            assert payload["bootstrapRequired"] is False
+
+            protected_settings = await remote_client.get("/api/settings")
+            assert protected_settings.status_code == 200
+
+            oauth_status = await remote_client.get("/api/oauth/status")
+            assert oauth_status.status_code == 200
+
+            models = await remote_client.get("/v1/models")
+            assert models.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_public_remote_insecure_no_auth_does_not_bypass_dashboard_or_proxy(app_instance, monkeypatch):
+    monkeypatch.setenv("CODEX_LB_INSECURE_ALLOW_REMOTE_NO_AUTH", "true")
+    monkeypatch.setenv("CODEX_LB_INSECURE_ALLOW_REMOTE_NO_AUTH_HOST_CIDRS", "10.0.0.12/32")
+    from app.core.config.settings import get_settings
+    from app.core.config.settings_cache import get_settings_cache
+
+    get_settings.cache_clear()
+    await get_settings_cache().invalidate()
+
+    async with app_instance.router.lifespan_context(app_instance):
+        transport = ASGITransport(app=app_instance, client=("10.0.0.99", 50002))
+        async with AsyncClient(transport=transport, base_url="http://lb.example") as remote_client:
+            session = await remote_client.get("/api/dashboard-auth/session")
+            assert session.status_code == 200
+            assert session.json()["authenticated"] is False
+            assert session.json()["bootstrapRequired"] is True
+
+            spoofed = await remote_client.get("/api/settings", headers={"Host": "localhost"})
+            assert spoofed.status_code == 401
+            assert spoofed.json()["error"]["code"] == "bootstrap_required"
+
+            protected_settings = await remote_client.get("/api/settings")
+            assert protected_settings.status_code == 401
+            assert protected_settings.json()["error"]["code"] == "bootstrap_required"
+
+            models = await remote_client.get("/v1/models")
+            assert models.status_code == 401
+            assert models.json()["error"]["code"] == "invalid_api_key"
+
+
+@pytest.mark.asyncio
+async def test_private_insecure_no_auth_requires_session_after_password_setup(
+    app_instance,
+    monkeypatch,
+):
+    monkeypatch.setenv("CODEX_LB_INSECURE_ALLOW_REMOTE_NO_AUTH", "true")
+    monkeypatch.setenv("CODEX_LB_INSECURE_ALLOW_REMOTE_NO_AUTH_HOST_CIDRS", "10.0.0.13/32")
+    from app.core.config.settings import get_settings
+    from app.core.config.settings_cache import get_settings_cache
+
+    get_settings.cache_clear()
+    await get_settings_cache().invalidate()
+
+    async with app_instance.router.lifespan_context(app_instance):
+        local_transport = ASGITransport(app=app_instance, client=("127.0.0.1", 50003))
+        async with AsyncClient(transport=local_transport, base_url="http://localhost") as local_client:
+            setup = await local_client.post(
+                "/api/dashboard-auth/password/setup",
+                json={"password": "password123"},
+            )
+            assert setup.status_code == 200
+
+            logout = await local_client.post("/api/dashboard-auth/logout", json={})
+            assert logout.status_code == 200
+
+        transport = ASGITransport(app=app_instance, client=("10.0.0.13", 50004))
+        async with AsyncClient(transport=transport, base_url="http://lb.example") as remote_client:
+            session = await remote_client.get("/api/dashboard-auth/session")
+            assert session.status_code == 200
+            assert session.json()["authenticated"] is False
+
+            blocked = await remote_client.get("/api/settings")
+            assert blocked.status_code == 401
+            assert blocked.json()["error"]["code"] == "authentication_required"

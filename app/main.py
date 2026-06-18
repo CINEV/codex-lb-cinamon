@@ -3,21 +3,24 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import stat
 import sys
 import time
 from collections.abc import Awaitable
 from contextlib import asynccontextmanager
 from importlib import import_module
 from ipaddress import ip_address
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Protocol, cast
 from urllib.parse import urlparse
 
 import aiohttp
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
+from starlette.staticfiles import StaticFiles
 
 from app import __version__
+from app.core.auth.guardian import build_auth_guardian_scheduler
 from app.core.bootstrap import ensure_auto_bootstrap_token, log_bootstrap_token
 from app.core.clients.http import close_http_client, init_http_client
 from app.core.config.settings import _bridge_advertise_hostname_is_replica_specific, get_settings
@@ -27,6 +30,8 @@ from app.core.metrics.middleware import MetricsMiddleware
 from app.core.metrics.prometheus import MULTIPROCESS_MODE, PROMETHEUS_AVAILABLE, make_scrape_registry, mark_process_dead
 from app.core.middleware import (
     add_api_firewall_middleware,
+    add_app_version_middleware,
+    add_backend_api_codex_v1_alias_middleware,
     add_dashboard_auth_proxy_middleware,
     add_request_decompression_middleware,
     add_request_id_middleware,
@@ -42,6 +47,7 @@ from app.modules.accounts import api as accounts_api
 from app.modules.api_keys import api as api_keys_api
 from app.modules.api_keys.reset_scheduler import build_api_key_limit_reset_scheduler
 from app.modules.audit import api as audit_api
+from app.modules.conversation_archive import api as conversation_archive_api
 from app.modules.dashboard import api as dashboard_api
 from app.modules.dashboard_auth import api as dashboard_auth_api
 from app.modules.firewall import api as firewall_api
@@ -57,7 +63,11 @@ from app.modules.proxy.ring_membership import (
     RingMembershipService,
     dynamic_bridge_ring_membership_enabled,
 )
+from app.modules.quota_planner import api as quota_planner_api
+from app.modules.quota_planner.scheduler import build_quota_planner_scheduler
+from app.modules.reports import api as reports_api
 from app.modules.request_logs import api as request_logs_api
+from app.modules.runtime import api as runtime_api
 from app.modules.settings import api as settings_api
 from app.modules.sticky_sessions import api as sticky_sessions_api
 from app.modules.sticky_sessions.cleanup_scheduler import build_sticky_session_cleanup_scheduler
@@ -80,6 +90,17 @@ class _RingMembershipReader(Protocol):
         *,
         require_endpoint: bool = False,
     ) -> Awaitable[list[str]]: ...
+
+
+def _resolve_static_asset_path(static_root: Path, requested_path: str) -> Path | None:
+    """Return a filesystem path for a SPA asset only when it stays under static_root."""
+    normalized = PurePosixPath(requested_path)
+    if normalized.is_absolute() or ".." in normalized.parts:
+        return None
+    full_path, stat_result = StaticFiles(directory=static_root, check_dir=False).lookup_path(normalized.as_posix())
+    if stat_result is None or not stat.S_ISREG(stat_result.st_mode):
+        return None
+    return Path(full_path)
 
 
 def _is_benign_metrics_bind_failure(exc: BaseException) -> bool:
@@ -130,10 +151,14 @@ async def lifespan(app: FastAPI):
     api_key_limit_reset_scheduler = build_api_key_limit_reset_scheduler()
     model_scheduler = build_model_refresh_scheduler()
     sticky_session_cleanup_scheduler = build_sticky_session_cleanup_scheduler()
+    quota_planner_scheduler = build_quota_planner_scheduler()
+    auth_guardian_scheduler = build_auth_guardian_scheduler()
     await usage_scheduler.start()
     await api_key_limit_reset_scheduler.start()
     await model_scheduler.start()
     await sticky_session_cleanup_scheduler.start()
+    await quota_planner_scheduler.start()
+    await auth_guardian_scheduler.start()
     if settings.metrics_enabled and PROMETHEUS_AVAILABLE:
         import uvicorn
 
@@ -291,6 +316,8 @@ async def lifespan(app: FastAPI):
             metrics_server.should_exit = True
 
         await cache_poller.stop()
+        await quota_planner_scheduler.stop()
+        await auth_guardian_scheduler.stop()
         await sticky_session_cleanup_scheduler.stop()
         await model_scheduler.stop()
         await api_key_limit_reset_scheduler.stop()
@@ -350,11 +377,14 @@ def create_app() -> FastAPI:
             dashboard_limit=settings.bulkhead_dashboard_limit,
         ),
     )
+    add_backend_api_codex_v1_alias_middleware(app)
+    add_app_version_middleware(app)
     add_exception_handlers(app)
 
     app.include_router(proxy_api.router)
     app.include_router(proxy_api.internal_router)
     app.include_router(proxy_api.ws_router)
+    app.include_router(proxy_api.wham_router)
     app.include_router(proxy_api.v1_router)
     app.include_router(proxy_api.v1_ws_router)
     app.include_router(proxy_api.transcribe_router)
@@ -365,6 +395,10 @@ def create_app() -> FastAPI:
     app.include_router(dashboard_api.router)
     app.include_router(usage_api.router)
     app.include_router(request_logs_api.router)
+    app.include_router(quota_planner_api.router)
+    app.include_router(reports_api.router)
+    app.include_router(conversation_archive_api.router)
+    app.include_router(runtime_api.router)
     app.include_router(oauth_api.router)
     app.include_router(dashboard_auth_api.router)
     app.include_router(settings_api.router)
@@ -395,8 +429,8 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail="Not Found")
 
         if normalized:
-            candidate = (static_dir / normalized).resolve()
-            if candidate.is_relative_to(static_root) and candidate.is_file():
+            candidate = _resolve_static_asset_path(static_root, normalized)
+            if candidate is not None:
                 return FileResponse(candidate)
             if _is_static_asset_path(normalized):
                 raise HTTPException(status_code=404, detail="Not Found")
@@ -404,7 +438,7 @@ def create_app() -> FastAPI:
         if not index_html.is_file():
             raise HTTPException(status_code=503, detail=frontend_build_hint)
 
-        return FileResponse(index_html, media_type="text/html")
+        return FileResponse(index_html, media_type="text/html", headers={"Cache-Control": "no-cache"})
 
     return app
 

@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AccountUsagePanel } from "@/features/accounts/components/account-usage-panel";
-import { createAccountSummary } from "@/test/mocks/factories";
+import { createAccountSummary, createAccountTrends } from "@/test/mocks/factories";
 
 describe("AccountUsagePanel", () => {
   beforeEach(() => {
@@ -47,12 +47,36 @@ describe("AccountUsagePanel", () => {
     expect(screen.getByText("Weekly remaining")).toBeInTheDocument();
   });
 
+  it("shows only Monthly for monthly-only free accounts", () => {
+    const account = createAccountSummary({
+      planType: "free",
+      usage: {
+        primaryRemainingPercent: null,
+        secondaryRemainingPercent: null,
+        monthlyRemainingPercent: 95,
+      },
+      windowMinutesPrimary: null,
+      windowMinutesSecondary: null,
+      windowMinutesMonthly: 43_200,
+      resetAtPrimary: null,
+      resetAtSecondary: null,
+      resetAtMonthly: "2026-01-31T00:00:00.000Z",
+    });
+
+    render(<AccountUsagePanel account={account} trends={null} />);
+
+    expect(screen.getByText("Monthly remaining")).toBeInTheDocument();
+    expect(screen.queryByText("5h remaining")).not.toBeInTheDocument();
+    expect(screen.queryByText("Weekly remaining")).not.toBeInTheDocument();
+  });
+
   it("renders mapped label for the known gated additional quota limit", () => {
     const account = createAccountSummary({
       additionalQuotas: [
         {
           limitName: "codex_spark",
           meteredFeature: "codex_bengalfox",
+          routingPolicy: "inherit",
           primaryWindow: {
             usedPercent: 35,
             resetAt: Math.floor(new Date("2026-01-07T13:00:00.000Z").getTime() / 1000),
@@ -86,5 +110,36 @@ describe("AccountUsagePanel", () => {
     expect(screen.getByText("Request logs total")).toBeInTheDocument();
     expect(screen.getByText(/\$0\.13/)).toBeInTheDocument();
     expect(screen.getByText(/51\.48K tok/)).toBeInTheDocument();
+  });
+
+  it("shows the weekly plan legend when scheduled trend data exists", () => {
+    const account = createAccountSummary();
+    const trends = createAccountTrends(account.accountId, {
+      secondaryScheduled: [
+        { t: "2026-01-01T00:00:00.000Z", v: 100 },
+        { t: "2026-01-01T01:00:00.000Z", v: 99.4 },
+      ],
+    });
+
+    render(<AccountUsagePanel account={account} trends={trends} />);
+
+    expect(screen.getByText("Weekly plan")).toBeInTheDocument();
+  });
+
+  it("shows trends when only secondary scheduled trend points are present", () => {
+    const account = createAccountSummary();
+    const trends = createAccountTrends(account.accountId, {
+      primary: [],
+      secondary: [],
+      secondaryScheduled: [
+        { t: "2026-01-01T00:00:00.000Z", v: 100 },
+        { t: "2026-01-01T06:00:00.000Z", v: 92 },
+      ],
+    });
+
+    render(<AccountUsagePanel account={account} trends={trends} />);
+
+    expect(screen.getByText("7-day trend")).toBeInTheDocument();
+    expect(screen.getByText("Weekly plan")).toBeInTheDocument();
   });
 });

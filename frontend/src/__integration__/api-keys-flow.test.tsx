@@ -67,6 +67,35 @@ describe("api keys flow integration", () => {
     });
   });
 
+  it("creates an api key with assigned accounts", async () => {
+    const user = userEvent.setup();
+
+    window.history.pushState({}, "", "/settings");
+    renderWithProviders(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Create key" }));
+    await user.type(screen.getByLabelText("Name"), "Scoped Integration Key");
+    await user.click(await screen.findByRole("button", { name: "All accounts" }));
+    await user.click(screen.getByRole("menuitemcheckbox", { name: /primary@example\.com/i }));
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    const createdDialog = await screen.findByRole("dialog", { name: "API key created" });
+    const closeCandidates = within(createdDialog).getAllByRole("button", {
+      name: "Close",
+    });
+    const closeButton =
+      closeCandidates.find((element) => element.getAttribute("data-slot") === "button") ??
+      closeCandidates[0];
+    await user.click(closeButton);
+
+    const createdRow = getParentRow(await screen.findByText("Scoped Integration Key"));
+    await openRowActions(user, createdRow);
+    await user.click(await screen.findByRole("menuitem", { name: /Edit/ }));
+
+    expect(await screen.findByRole("button", { name: "1 account selected" })).toBeInTheDocument();
+  });
+
   it("displays the current api key list on settings", async () => {
     window.history.pushState({}, "", "/settings");
     renderWithProviders(<App />);
@@ -87,7 +116,10 @@ describe("api keys flow integration", () => {
     const readOnlyRow = getParentRow(screen.getByText("Read only key"));
     expect(within(readOnlyRow).getByText("sk-second")).toBeInTheDocument();
     expect(within(readOnlyRow).getByText("gpt-4o-mini")).toBeInTheDocument();
-    expect(within(readOnlyRow).getByText("No Usage")).toBeInTheDocument();
+    expect(within(readOnlyRow).getByText(/12\.5K tok/)).toBeInTheDocument();
+    expect(within(readOnlyRow).getByText(/2\.2K cached/)).toBeInTheDocument();
+    expect(within(readOnlyRow).getByText(/42 req/)).toBeInTheDocument();
+    expect(within(readOnlyRow).getByText(/\$0\.42/)).toBeInTheDocument();
     expect(within(readOnlyRow).getByText("Never")).toBeInTheDocument();
     expect(within(readOnlyRow).getByText("Disabled")).toBeInTheDocument();
   });

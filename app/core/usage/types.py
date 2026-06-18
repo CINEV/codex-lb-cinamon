@@ -78,6 +78,7 @@ class UsageMetricsSummary:
 class UsageSummaryPayload:
     primary_window: UsageWindowSnapshot
     secondary_window: UsageWindowSnapshot | None
+    monthly_window: UsageWindowSnapshot | None
     cost: UsageCostSummary
     metrics: UsageMetricsSummary | None = None
 
@@ -105,6 +106,9 @@ class UsageTrendBucket:
     window: str
     avg_used_percent: float
     samples: int
+    reset_at: int | None = None
+    window_minutes: int | None = None
+    recorded_at: datetime | None = None
 
 
 @dataclass(frozen=True)

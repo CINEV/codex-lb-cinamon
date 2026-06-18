@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import base64
 import json
+from typing import cast
 
 import pytest
 
@@ -56,7 +57,7 @@ async def test_backend_files_create_forwards_payload_and_returns_upstream_json(a
 
     captured: dict[str, object] = {}
 
-    async def fake_create_file(*, payload, headers, access_token, account_id, base_url=None, session=None):
+    async def fake_create_file(*, payload, headers, access_token, account_id, base_url=None, session=None, **kwargs):
         captured["payload"] = payload
         captured["access_token"] = access_token
         captured["account_id"] = account_id
@@ -82,7 +83,7 @@ async def test_backend_files_create_defaults_use_case_to_codex(async_client, mon
     await _import_account(async_client, "acc_files_default_uc", "files-default-uc@example.com")
     captured: dict[str, object] = {}
 
-    async def fake_create_file(*, payload, headers, access_token, account_id, base_url=None, session=None):
+    async def fake_create_file(*, payload, headers, access_token, account_id, base_url=None, session=None, **kwargs):
         captured["payload"] = payload
         return {"file_id": "f", "upload_url": "https://blob.example/sas"}
 
@@ -94,7 +95,8 @@ async def test_backend_files_create_defaults_use_case_to_codex(async_client, mon
     )
 
     assert response.status_code == 200
-    assert captured["payload"]["use_case"] == "codex"  # type: ignore[index]
+    captured_payload = cast(dict[str, object], captured["payload"])
+    assert captured_payload["use_case"] == "codex"
 
 
 @pytest.mark.asyncio
@@ -134,7 +136,7 @@ async def test_backend_files_create_rejects_missing_file_name(async_client):
 async def test_backend_files_create_maps_upstream_error(async_client, monkeypatch):
     await _import_account(async_client, "acc_files_upstream_err", "files-upstream-err@example.com")
 
-    async def fake_create_file(*, payload, headers, access_token, account_id, base_url=None, session=None):
+    async def fake_create_file(*, payload, headers, access_token, account_id, base_url=None, session=None, **kwargs):
         raise FileProxyError(
             413,
             {"error": {"message": "file too large", "type": "invalid_request_error", "code": "file_too_large"}},
@@ -153,12 +155,50 @@ async def test_backend_files_create_maps_upstream_error(async_client, monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_backend_files_create_repeated_401_after_refresh_fails_over(async_client, monkeypatch):
+    await _import_account(async_client, "acc_files_invalidated_a", "files-invalidated-a@example.com")
+    await _import_account(async_client, "acc_files_invalidated_b", "files-invalidated-b@example.com")
+    captured_account_ids: list[str | None] = []
+    invalidated_account_id: str | None = None
+
+    async def fake_create_file(*, payload, headers, access_token, account_id, base_url=None, session=None, **kwargs):
+        del payload, headers, access_token, base_url, session
+        nonlocal invalidated_account_id
+        if invalidated_account_id is None:
+            invalidated_account_id = account_id
+        captured_account_ids.append(account_id)
+        if account_id == invalidated_account_id:
+            raise FileProxyError(
+                401,
+                {"error": {"message": "token invalidated", "type": "authentication_error", "code": "invalid_api_key"}},
+            )
+        return {"file_id": "file_recovered", "upload_url": "https://blob.example/recovered"}
+
+    async def fake_ensure_fresh(self, account, *, force=False, timeout_seconds=None):
+        assert timeout_seconds is not None
+        return account
+
+    monkeypatch.setattr(proxy_module, "core_create_file", fake_create_file)
+    monkeypatch.setattr(proxy_module.ProxyService, "_ensure_fresh_with_budget", fake_ensure_fresh)
+
+    response = await async_client.post(
+        "/backend-api/files",
+        json={"file_name": "x.png", "file_size": 1},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["file_id"] == "file_recovered"
+    assert captured_account_ids[:2] == [invalidated_account_id, invalidated_account_id]
+    assert captured_account_ids[2] != invalidated_account_id
+
+
+@pytest.mark.asyncio
 async def test_backend_files_finalize_returns_upstream_payload(async_client, monkeypatch):
     await _import_account(async_client, "acc_files_finalize", "files-finalize@example.com")
 
     captured: dict[str, object] = {}
 
-    async def fake_finalize_file(*, file_id, headers, access_token, account_id, base_url=None, session=None):
+    async def fake_finalize_file(*, file_id, headers, access_token, account_id, base_url=None, session=None, **kwargs):
         captured["file_id"] = file_id
         captured["account_id"] = account_id
         return {
@@ -182,13 +222,48 @@ async def test_backend_files_finalize_returns_upstream_payload(async_client, mon
 
 
 @pytest.mark.asyncio
+async def test_backend_files_finalize_repeated_401_after_refresh_fails_over(async_client, monkeypatch):
+    await _import_account(async_client, "acc_files_finalize_invalidated_a", "files-finalize-invalidated-a@example.com")
+    await _import_account(async_client, "acc_files_finalize_invalidated_b", "files-finalize-invalidated-b@example.com")
+    captured_account_ids: list[str | None] = []
+    invalidated_account_id: str | None = None
+
+    async def fake_finalize_file(*, file_id, headers, access_token, account_id, base_url=None, session=None, **kwargs):
+        del file_id, headers, access_token, base_url, session
+        nonlocal invalidated_account_id
+        if invalidated_account_id is None:
+            invalidated_account_id = account_id
+        captured_account_ids.append(account_id)
+        if account_id == invalidated_account_id:
+            raise FileProxyError(
+                401,
+                {"error": {"message": "token invalidated", "type": "authentication_error", "code": "invalid_api_key"}},
+            )
+        return {"status": "success", "download_url": "https://download.example/recovered"}
+
+    async def fake_ensure_fresh(self, account, *, force=False, timeout_seconds=None):
+        assert timeout_seconds is not None
+        return account
+
+    monkeypatch.setattr(proxy_module, "core_finalize_file", fake_finalize_file)
+    monkeypatch.setattr(proxy_module.ProxyService, "_ensure_fresh_with_budget", fake_ensure_fresh)
+
+    response = await async_client.post("/backend-api/files/file_recovered/uploaded")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+    assert captured_account_ids[:2] == [invalidated_account_id, invalidated_account_id]
+    assert captured_account_ids[2] != invalidated_account_id
+
+
+@pytest.mark.asyncio
 async def test_backend_files_finalize_propagates_retry_status(async_client, monkeypatch):
     """Once the finalize loop in the upstream client gives up with a
     final ``retry`` status, we return that payload verbatim so the
     caller can decide what to do (mirrors upstream Codex CLI behaviour)."""
     await _import_account(async_client, "acc_files_finalize_retry", "files-finalize-retry@example.com")
 
-    async def fake_finalize_file(*, file_id, headers, access_token, account_id, base_url=None, session=None):
+    async def fake_finalize_file(*, file_id, headers, access_token, account_id, base_url=None, session=None, **kwargs):
         return {"status": "retry"}
 
     monkeypatch.setattr(proxy_module, "core_finalize_file", fake_finalize_file)
@@ -202,7 +277,7 @@ async def test_backend_files_finalize_propagates_retry_status(async_client, monk
 async def test_backend_files_finalize_maps_upstream_404(async_client, monkeypatch):
     await _import_account(async_client, "acc_files_finalize_missing", "files-finalize-missing@example.com")
 
-    async def fake_finalize_file(*, file_id, headers, access_token, account_id, base_url=None, session=None):
+    async def fake_finalize_file(*, file_id, headers, access_token, account_id, base_url=None, session=None, **kwargs):
         raise FileProxyError(
             404,
             {"error": {"message": "file not found", "type": "invalid_request_error", "code": "not_found"}},
@@ -260,11 +335,11 @@ async def test_backend_files_finalize_pins_to_create_account(async_client, monke
     create_seen: dict[str, object] = {}
     finalize_seen: dict[str, object] = {}
 
-    async def fake_create_file(*, payload, headers, access_token, account_id, base_url=None, session=None):
+    async def fake_create_file(*, payload, headers, access_token, account_id, base_url=None, session=None, **kwargs):
         create_seen["account_id"] = account_id
         return {"file_id": "file_pinned", "upload_url": "https://blob.example/sas?token=p"}
 
-    async def fake_finalize_file(*, file_id, headers, access_token, account_id, base_url=None, session=None):
+    async def fake_finalize_file(*, file_id, headers, access_token, account_id, base_url=None, session=None, **kwargs):
         finalize_seen["account_id"] = account_id
         finalize_seen["file_id"] = file_id
         return {"status": "success", "download_url": "https://blob.example/dl/p"}
@@ -287,6 +362,52 @@ async def test_backend_files_finalize_pins_to_create_account(async_client, monke
     # upstream chatgpt-account-id, regardless of which account the
     # load balancer would have picked otherwise.
     assert finalize_seen["account_id"] == creating_account
+
+
+@pytest.mark.asyncio
+async def test_backend_files_finalize_pinned_401_retry_fails_closed(async_client, monkeypatch):
+    """Pinned finalize must not fail over to a different account after auth failure."""
+
+    await _import_account(async_client, "acc_pin_401_a", "pin-401-a@example.com")
+    await _import_account(async_client, "acc_pin_401_b", "pin-401-b@example.com")
+
+    create_seen: dict[str, str | None] = {}
+    finalize_account_ids: list[str | None] = []
+
+    async def fake_create_file(*, payload, headers, access_token, account_id, base_url=None, session=None, **kwargs):
+        create_seen["account_id"] = account_id
+        return {"file_id": "file_pinned_401", "upload_url": "https://blob.example/sas?token=pin401"}
+
+    async def fake_finalize_file(*, file_id, headers, access_token, account_id, base_url=None, session=None, **kwargs):
+        del file_id, headers, access_token, base_url, session
+        finalize_account_ids.append(account_id)
+        if account_id == create_seen["account_id"]:
+            raise FileProxyError(
+                401,
+                {"error": {"message": "token invalidated", "type": "authentication_error", "code": "invalid_api_key"}},
+            )
+        return {"status": "success", "download_url": "https://blob.example/wrong-account"}
+
+    async def fake_ensure_fresh(self, account, *, force=False, timeout_seconds=None):
+        assert timeout_seconds is not None
+        return account
+
+    monkeypatch.setattr(proxy_module, "core_create_file", fake_create_file)
+    monkeypatch.setattr(proxy_module, "core_finalize_file", fake_finalize_file)
+    monkeypatch.setattr(proxy_module.ProxyService, "_ensure_fresh_with_budget", fake_ensure_fresh)
+
+    create_resp = await async_client.post(
+        "/backend-api/files",
+        json={"file_name": "a.png", "file_size": 100, "use_case": "codex"},
+    )
+    assert create_resp.status_code == 200
+    creating_account = create_seen["account_id"]
+    assert creating_account in {"acc_pin_401_a", "acc_pin_401_b"}
+
+    finalize_resp = await async_client.post("/backend-api/files/file_pinned_401/uploaded")
+    assert finalize_resp.status_code == 401
+    assert finalize_resp.json()["error"]["code"] == "invalid_api_key"
+    assert finalize_account_ids == [creating_account, creating_account]
 
 
 @pytest.mark.asyncio
@@ -359,7 +480,7 @@ async def test_v1_responses_prompt_cache_key_overrides_file_id_pin(async_client,
 
     create_account_holder: dict[str, str] = {}
 
-    async def fake_create_file(*, payload, headers, access_token, account_id, base_url=None, session=None):
+    async def fake_create_file(*, payload, headers, access_token, account_id, base_url=None, session=None, **kwargs):
         create_account_holder["account_id"] = account_id
         return {"file_id": "file_pck", "upload_url": "https://blob.example/sas?t=p"}
 
@@ -489,7 +610,7 @@ async def test_synthesized_turn_state_does_not_block_file_id_pin(async_client):
 
     from app.core.openai.requests import ResponsesRequest
     from app.dependencies import get_proxy_service_for_app
-    from app.modules.proxy.service import ensure_downstream_turn_state
+    from app.modules.proxy.affinity import ensure_downstream_turn_state
 
     service = get_proxy_service_for_app(async_client._transport.app)
     await service._pin_file_account("file_synth_ts", "acc_ts_a")

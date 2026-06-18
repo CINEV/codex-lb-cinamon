@@ -76,20 +76,26 @@ def test_known_unsupported_upstream_fields_are_stripped():
         "instructions": "hi",
         "input": [],
         "max_output_tokens": 32000,
+        "metadata": {"client": "cursor"},
         "prompt_cache_retention": "4h",
         "safety_identifier": "safe_123",
         "temperature": 0.2,
         "top_p": 0.9,
+        "truncation": "auto",
+        "user": "cursor-user",
         "custom_field": "kept",
     }
     request = ResponsesRequest.model_validate(payload)
 
     dumped = request.to_payload()
     assert "max_output_tokens" not in dumped
+    assert "metadata" not in dumped
     assert "prompt_cache_retention" not in dumped
     assert "safety_identifier" not in dumped
     assert "temperature" not in dumped
     assert "top_p" not in dumped
+    assert "truncation" not in dumped
+    assert "user" not in dumped
     assert dumped["custom_field"] == "kept"
 
 
@@ -140,18 +146,22 @@ def test_compact_known_unsupported_upstream_fields_are_stripped():
         "model": "gpt-5.1",
         "instructions": "hi",
         "input": [],
+        "metadata": {"client": "cursor"},
         "prompt_cache_retention": "4h",
         "safety_identifier": "safe_123",
         "temperature": 0.2,
         "top_p": 0.9,
+        "user": "cursor-user",
     }
     request = ResponsesCompactRequest.model_validate(payload)
 
     dumped = request.to_payload()
+    assert "metadata" not in dumped
     assert "prompt_cache_retention" not in dumped
     assert "safety_identifier" not in dumped
     assert "temperature" not in dumped
     assert "top_p" not in dumped
+    assert "user" not in dumped
 
 
 def test_compact_normalizes_fast_service_tier_to_priority_for_upstream():
@@ -567,6 +577,132 @@ def test_v1_system_message_moves_to_instructions():
 
     assert request.instructions == "sys"
     assert request.input == [{"role": "user", "content": [{"type": "input_text", "text": "hi"}]}]
+
+
+def test_responses_input_system_message_moves_to_instructions():
+    payload = {
+        "model": "gpt-5.1",
+        "instructions": "primary",
+        "input": [
+            {"type": "message", "role": "system", "content": [{"type": "input_text", "text": "sys"}]},
+            {"type": "message", "role": "developer", "content": "dev"},
+            {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hi"}]},
+        ],
+    }
+    request = ResponsesRequest.model_validate(payload)
+
+    assert request.instructions == "primary\nsys\ndev"
+    assert request.input == [{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hi"}]}]
+
+
+def test_responses_input_system_message_keeps_user_text_parts():
+    payload = {
+        "model": "gpt-5.1",
+        "instructions": "primary",
+        "input": [
+            {
+                "type": "message",
+                "role": "system",
+                "content": [{"type": "input_text", "text": "sys"}],
+            },
+            {
+                "type": "message",
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": "hello"},
+                    {"type": "input_file", "file_id": "file_123"},
+                ],
+            },
+        ],
+    }
+    request = ResponsesRequest.model_validate(payload)
+
+    assert request.instructions == "primary\nsys"
+    assert request.input == [
+        {
+            "type": "message",
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": "hello"},
+                {"type": "input_file", "file_id": "file_123"},
+            ],
+        }
+    ]
+
+
+def test_responses_input_system_message_preserves_non_text_parts():
+    payload = {
+        "model": "gpt-5.1",
+        "instructions": "primary",
+        "input": [
+            {
+                "type": "message",
+                "role": "system",
+                "content": [
+                    {"type": "input_text", "text": "sys"},
+                    {"type": "input_file", "file_id": "file_123"},
+                    {"type": "input_image", "image_url": "sediment://file_456"},
+                ],
+            },
+            {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hi"}]},
+        ],
+    }
+    request = ResponsesRequest.model_validate(payload)
+
+    assert request.instructions == "primary\nsys"
+    assert request.input == [
+        {
+            "type": "message",
+            "role": "user",
+            "content": [
+                {"type": "input_file", "file_id": "file_123"},
+                {"type": "input_image", "image_url": "sediment://file_456"},
+            ],
+        },
+        {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hi"}]},
+    ]
+    assert extract_input_file_ids(request.input) == {"file_123", "file_456"}
+    assert [ref.file_id for ref in extract_input_image_file_references(request.input)] == ["file_456"]
+
+
+def test_responses_input_developer_message_preserves_single_non_text_part():
+    payload = {
+        "model": "gpt-5.1",
+        "instructions": "primary",
+        "input": [
+            {
+                "type": "message",
+                "role": "developer",
+                "content": {"type": "input_file", "file_id": "file_123"},
+            }
+        ],
+    }
+    request = ResponsesRequest.model_validate(payload)
+
+    assert request.instructions == "primary"
+    assert request.input == [
+        {
+            "type": "message",
+            "role": "user",
+            "content": {"type": "input_file", "file_id": "file_123"},
+        }
+    ]
+    assert extract_input_file_ids(request.input) == {"file_123"}
+
+
+def test_responses_compact_input_system_message_moves_to_instructions():
+    payload = {
+        "model": "gpt-5.1",
+        "instructions": "primary",
+        "input": [
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "compact me"},
+        ],
+    }
+    request = ResponsesCompactRequest.model_validate(payload)
+
+    assert request.instructions == "primary\nsys"
+    assert request.input == [{"role": "user", "content": "compact me"}]
 
 
 def test_v1_instructions_merge():
@@ -1018,6 +1154,14 @@ def test_extract_input_image_file_references_collects_multi_message_paths():
             ],
         },
         {"type": "input_image", "image_url": "sediment://file_b"},
+        {
+            "type": "function_call_output",
+            "call_id": "call_1",
+            "output": [
+                {"type": "input_text", "text": "tool image"},
+                {"type": "input_image", "file_id": "file_tool"},
+            ],
+        },
     ]
 
     references = extract_input_image_file_references(input_value)
@@ -1025,4 +1169,26 @@ def test_extract_input_image_file_references_collects_multi_message_paths():
     assert [(reference.item_index, reference.content_index, reference.file_id) for reference in references] == [
         (0, 1, "file_a"),
         (1, None, "file_b"),
+        (2, None, "file_tool"),
+    ]
+
+
+def test_extract_input_image_file_references_collects_tool_output_paths():
+    input_value: list[JsonValue] = [
+        {
+            "type": "function_call_output",
+            "call_id": "call_1",
+            "output": [
+                {"type": "input_text", "text": "ignore"},
+                {"type": "input_image", "file_id": "file_tool"},
+                {"type": "input_image", "image_url": "sediment://file_nested"},
+            ],
+        }
+    ]
+
+    references = extract_input_image_file_references(input_value)
+
+    assert [(reference.item_index, reference.content_index, reference.file_id) for reference in references] == [
+        (0, None, "file_tool"),
+        (0, None, "file_nested"),
     ]

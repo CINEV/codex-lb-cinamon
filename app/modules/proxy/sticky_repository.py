@@ -13,8 +13,18 @@ from sqlalchemy.sql import Insert
 
 from app.core.utils.time import to_utc_naive, utcnow
 from app.db.models import Account, OpenAIPlatformIdentity, StickySession, StickySessionKind
+from app.db.session import sqlite_writer_section
 from app.modules.sticky_sessions.schemas import StickySessionSortBy, StickySessionSortDir
 from app.modules.upstream_identities.types import CHATGPT_WEB_PROVIDER_KIND, OPENAI_PLATFORM_PROVIDER_KIND
+
+# Each (key, kind) pair in delete_entries contributes 2 bind parameters to
+# the underlying DELETE...OR (key=:k AND kind=:t)... statement. SQLite's
+# default SQLITE_LIMIT_VARIABLE_NUMBER is 999 on builds older than 3.32
+# and 32766 on newer builds, so chunking conservatively at 250 pairs
+# (500 bind parameters) keeps delete-filtered safe on any libsqlite that
+# ships with current Python interpreters. Postgres allows up to 65535
+# bind parameters, which this chunk size also respects.
+_DELETE_ENTRIES_CHUNK_SIZE = 250
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,8 +128,9 @@ class StickySessionsRepository:
             routing_subject_id=routing_subject_id,
             account_id=account_id if provider_kind == CHATGPT_WEB_PROVIDER_KIND else None,
         )
-        await self._session.execute(statement)
-        await self._session.commit()
+        async with sqlite_writer_section():
+            await self._session.execute(statement)
+            await self._session.commit()
         row = await self.get_scoped_entry(key, kind=kind, provider_kind=provider_kind)
         if row is None:
             raise RuntimeError(
@@ -139,8 +150,9 @@ class StickySessionsRepository:
             StickySession.kind == kind,
             StickySession.provider_kind == provider_kind,
         )
-        result = await self._session.execute(statement.returning(StickySession.key))
-        await self._session.commit()
+        async with sqlite_writer_section():
+            result = await self._session.execute(statement.returning(StickySession.key))
+            await self._session.commit()
         return result.scalar_one_or_none() is not None
 
     async def delete_entries(
@@ -157,23 +169,30 @@ class StickySessionsRepository:
         targets = {(key, kind, provider_kind) for key, kind, provider_kind in entries if key}
         if not targets:
             return []
-        statement = delete(StickySession).where(
-            or_(
-                *(
-                    and_(
-                        StickySession.key == key,
-                        StickySession.kind == kind,
-                        StickySession.provider_kind == provider_kind,
+
+        deleted: list[tuple[str, StickySessionKind, str]] = []
+        targets_list = list(targets)
+        for offset in range(0, len(targets_list), _DELETE_ENTRIES_CHUNK_SIZE):
+            chunk = targets_list[offset : offset + _DELETE_ENTRIES_CHUNK_SIZE]
+            statement = delete(StickySession).where(
+                or_(
+                    *(
+                        and_(
+                            StickySession.key == key,
+                            StickySession.kind == kind,
+                            StickySession.provider_kind == provider_kind,
+                        )
+                        for key, kind, provider_kind in chunk
                     )
-                    for key, kind, provider_kind in targets
                 )
             )
-        )
-        result = await self._session.execute(
-            statement.returning(StickySession.key, StickySession.kind, StickySession.provider_kind)
-        )
-        await self._session.commit()
-        return [(key, kind, provider_kind) for key, kind, provider_kind in result.all()]
+            async with sqlite_writer_section():
+                result = await self._session.execute(
+                    statement.returning(StickySession.key, StickySession.kind, StickySession.provider_kind)
+                )
+                await self._session.commit()
+            deleted.extend((key, kind, provider_kind) for key, kind, provider_kind in result.all())
+        return deleted
 
     async def delete_by_routing_subject(
         self,
@@ -187,8 +206,9 @@ class StickySessionsRepository:
             StickySession.provider_kind == provider_kind,
             StickySession.routing_subject_id == routing_subject_id,
         )
-        result = await self._session.execute(statement.returning(StickySession.key))
-        await self._session.commit()
+        async with sqlite_writer_section():
+            result = await self._session.execute(statement.returning(StickySession.key))
+            await self._session.commit()
         return len(result.all())
 
     async def list_entry_identifiers(
@@ -348,9 +368,10 @@ class StickySessionsRepository:
         stmt = delete(StickySession).where(StickySession.updated_at < to_utc_naive(cutoff))
         if kind is not None:
             stmt = stmt.where(StickySession.kind == kind)
-        result = await self._session.execute(stmt.returning(StickySession.key))
-        deleted = len(result.scalars().all())
-        await self._session.commit()
+        async with sqlite_writer_section():
+            result = await self._session.execute(stmt.returning(StickySession.key))
+            deleted = len(result.scalars().all())
+            await self._session.commit()
         return deleted
 
     def _build_upsert_statement(

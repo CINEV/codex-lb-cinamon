@@ -6,10 +6,19 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.usage.types import BucketModelAggregate, RequestActivityAggregate
-from app.db.models import Account, AdditionalUsageHistory, RequestLog, UsageHistory
+from app.db.models import (
+    Account,
+    AccountLimitWarmup,
+    AdditionalUsageHistory,
+    DashboardSettings,
+    RequestLog,
+    UsageHistory,
+)
 from app.modules.accounts.repository import AccountsRepository
+from app.modules.limit_warmup.repository import LimitWarmupRepository
 from app.modules.request_logs.repository import RequestLogsRepository
-from app.modules.usage.repository import AdditionalUsageRepository, UsageRepository
+from app.modules.settings.repository import SettingsRepository
+from app.modules.usage.repository import AdditionalUsageRepository, UsageHistorySnapshot, UsageRepository
 
 
 class DashboardRepository:
@@ -18,6 +27,8 @@ class DashboardRepository:
         self._usage_repo = UsageRepository(session)
         self._logs_repo = RequestLogsRepository(session)
         self._additional_usage_repo = AdditionalUsageRepository(session)
+        self._limit_warmup_repo = LimitWarmupRepository(session)
+        self._settings_repo = SettingsRepository(session)
 
     async def list_accounts(self) -> list[Account]:
         return await self._accounts_repo.list_accounts()
@@ -38,7 +49,7 @@ class DashboardRepository:
         account_ids: list[str],
         window: str,
         since: datetime,
-    ) -> dict[str, list[UsageHistory]]:
+    ) -> dict[str, list[UsageHistorySnapshot]]:
         return await self._usage_repo.bulk_history_since(account_ids, window, since)
 
     async def latest_window_minutes(self, window: str) -> int | None:
@@ -57,8 +68,21 @@ class DashboardRepository:
     async def aggregate_activity_since(self, since: datetime) -> RequestActivityAggregate:
         return await self._logs_repo.aggregate_activity_since(since)
 
+    async def aggregate_activity_between(
+        self,
+        since: datetime,
+        until: datetime,
+    ) -> RequestActivityAggregate:
+        return await self._logs_repo.aggregate_activity_between(since, until)
+
     async def top_error_since(self, since: datetime) -> str | None:
         return await self._logs_repo.top_error_since(since)
+
+    async def top_error_between(self, since: datetime, until: datetime) -> str | None:
+        return await self._logs_repo.top_error_between(since, until)
+
+    async def earliest_activity_at(self) -> datetime | None:
+        return await self._logs_repo.earliest_activity_at()
 
     async def list_additional_quota_keys(
         self,
@@ -75,3 +99,9 @@ class DashboardRepository:
 
     async def latest_additional_recorded_at(self) -> datetime | None:
         return await self._additional_usage_repo.latest_recorded_at()
+
+    async def latest_limit_warmups_by_account(self, account_ids: list[str]) -> dict[str, AccountLimitWarmup]:
+        return await self._limit_warmup_repo.latest_by_account(account_ids)
+
+    async def get_settings(self) -> DashboardSettings:
+        return await self._settings_repo.get_or_create()

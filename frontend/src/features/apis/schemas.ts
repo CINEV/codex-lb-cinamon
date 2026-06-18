@@ -1,7 +1,7 @@
 import * as z from "zod";
 
-export const ApiKeyTrendPointSchema = z.object({
-  t: z.string().datetime({ offset: true }),
+const ApiKeyTrendPointSchema = z.object({
+  t: z.iso.datetime({ offset: true }),
   v: z.number(),
 });
 
@@ -11,14 +11,23 @@ export const ApiKeyTrendsResponseSchema = z.object({
   tokens: z.array(ApiKeyTrendPointSchema),
 });
 
+const ApiKeyAccountCostSchema = z.object({
+  accountId: z.string().nullable().default(null),
+  email: z.string().nullable().default(null),
+  costUsd: z.number().default(0),
+  isDeleted: z.boolean().default(false),
+});
+
 export const ApiKeyUsage7DayResponseSchema = z.object({
   keyId: z.string(),
   totalTokens: z.number().int(),
   totalCostUsd: z.number(),
   totalRequests: z.number().int(),
   cachedInputTokens: z.number().int(),
+  accountCosts: z.array(ApiKeyAccountCostSchema).default([]),
 });
 
+export type ApiKeyAccountCost = z.infer<typeof ApiKeyAccountCostSchema>;
 export type ApiKeyTrendPoint = z.infer<typeof ApiKeyTrendPointSchema>;
 export type ApiKeyTrendsResponse = z.infer<typeof ApiKeyTrendsResponseSchema>;
 export type ApiKeyUsage7DayResponse = z.infer<typeof ApiKeyUsage7DayResponseSchema>;

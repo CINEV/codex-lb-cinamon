@@ -1,15 +1,17 @@
 {
   "release-type": "python",
+  "versioning": "always-bump-patch",
+  "bootstrap-sha": "8a6c9fde6b885c8003bea610fee1a38e0862119b",
   "packages": {
     ".": {
       "release-type": "python",
+      "versioning": "always-bump-patch",
       "changelog-path": "CHANGELOG.md",
       "extra-files": [
         "app/__init__.py",
         {
-          "type": "toml",
-          "path": "uv.lock",
-          "jsonpath": "$.package[?(@.name=='codex-lb-cinamon')].version"
+          "type": "generic",
+          "path": "uv.lock"
         },
         {
           "type": "json",
