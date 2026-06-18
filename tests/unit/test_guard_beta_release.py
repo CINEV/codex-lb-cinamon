@@ -371,6 +371,42 @@ def test_pr_guard_accepts_dependency_only_package_json_edits_on_beta_base(tmp_pa
     assert "No release-managed version files changed" in result.stdout
 
 
+def test_pr_guard_accepts_stable_release_pr_with_chart_release_please_annotations(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    write_minimal_release_files(repo, version="1.20.1")
+    chart = repo / "deploy" / "helm" / "codex-lb" / "Chart.yaml"
+    chart.write_text(
+        "apiVersion: v2\n"
+        "name: codex-lb\n"
+        "version: 1.20.1 # x-release-please-version\n"
+        "appVersion: 1.20.1 # x-release-please-version\n",
+        encoding="utf-8",
+    )
+    git(repo, "init")
+    git(repo, "config", "user.email", "test@example.com")
+    git(repo, "config", "user.name", "Test")
+    git(repo, "add", ".")
+    git(repo, "commit", "-m", "chore: release v1.20.1")
+    git(repo, "branch", "-M", "main")
+
+    update_project_versions(repo, "1.20.2")
+    git(repo, "add", ".")
+    git(repo, "commit", "-m", "chore(main): release 1.20.2")
+
+    result = run_guard(
+        Path(__file__).resolve().parents[2],
+        repo,
+        "--base-ref",
+        "HEAD~1",
+        "--head-ref",
+        "release-please--branches--main",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Release-managed files changed for non-beta version 1.20.2" in result.stdout
+
+
 def test_pr_guard_accepts_pep440_uv_lock_beta_version_on_dependency_edits(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
