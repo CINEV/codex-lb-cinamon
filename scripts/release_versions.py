@@ -118,6 +118,13 @@ def _write_text(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def read_chart_version_field_text(text: str, field: str) -> str:
+    match = re.search(rf"^{re.escape(field)}:\s*(?P<value>[^#\n]+?)(?:\s+#.*)?$", text, flags=re.MULTILINE)
+    if not match:
+        raise ValueError(f"could not find chart {field}")
+    return match.group("value").strip().strip("\"'")
+
+
 def update_project_versions(root: Path, version: str) -> None:
     """Update all release-please managed version files to *version*.
 
@@ -158,8 +165,18 @@ def update_project_versions(root: Path, version: str) -> None:
 
     chart = root / "deploy" / "helm" / "codex-lb" / "Chart.yaml"
     chart_text = chart.read_text(encoding="utf-8")
-    chart_text = _replace_once(chart_text, r"^version: .*$", f"version: {version}", path=str(chart))
-    chart_text = _replace_once(chart_text, r"^appVersion: .*$", f"appVersion: {version}", path=str(chart))
+    chart_text = _replace_once(
+        chart_text,
+        r"^(version:\s*)[^#\n]+?(\s+#.*)?$",
+        rf"\g<1>{version}\2",
+        path=str(chart),
+    )
+    chart_text = _replace_once(
+        chart_text,
+        r"^(appVersion:\s*)[^#\n]+?(\s+#.*)?$",
+        rf"\g<1>{version}\2",
+        path=str(chart),
+    )
     _write_text(chart, chart_text)
 
     uv_lock = root / "uv.lock"
@@ -197,8 +214,8 @@ def read_project_versions(root: Path) -> dict[str, str]:
             "app version",
         ),
         "frontend/package.json": package_data["version"],
-        "deploy/helm/codex-lb/Chart.yaml version": find(r"^version: (.+)$", chart_text, "chart version"),
-        "deploy/helm/codex-lb/Chart.yaml appVersion": find(r"^appVersion: (.+)$", chart_text, "chart appVersion"),
+        "deploy/helm/codex-lb/Chart.yaml version": read_chart_version_field_text(chart_text, "version"),
+        "deploy/helm/codex-lb/Chart.yaml appVersion": read_chart_version_field_text(chart_text, "appVersion"),
         "uv.lock": find(
             r'\[\[package\]\]\nname = "'
             + re.escape(package_name)

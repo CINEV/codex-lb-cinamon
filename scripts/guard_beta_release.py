@@ -20,6 +20,7 @@ from typing import Any, cast
 from scripts.release_versions import (
     ReleaseVersion,
     parse_version,
+    read_chart_version_field_text,
     read_project_versions,
     read_pyproject_name_text,
     read_pyproject_version,
@@ -185,8 +186,8 @@ def _read_project_versions_at_ref(root: Path, ref: str) -> dict[str, str]:
             "app version",
         ),
         "frontend/package.json": package_data["version"],
-        "deploy/helm/codex-lb/Chart.yaml version": find(r"^version: (.+)$", chart_text, "chart version"),
-        "deploy/helm/codex-lb/Chart.yaml appVersion": find(r"^appVersion: (.+)$", chart_text, "chart appVersion"),
+        "deploy/helm/codex-lb/Chart.yaml version": read_chart_version_field_text(chart_text, "version"),
+        "deploy/helm/codex-lb/Chart.yaml appVersion": read_chart_version_field_text(chart_text, "appVersion"),
         "uv.lock": find(
             r'\[\[package\]\]\nname = "'
             + re.escape(package_name)

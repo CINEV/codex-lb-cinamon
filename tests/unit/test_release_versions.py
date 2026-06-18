@@ -149,6 +149,37 @@ def test_update_project_versions_preserves_uv_lock_release_please_annotation(tmp
     assert 'version = "1.20.1" # x-release-please-version' in (tmp_path / "uv.lock").read_text(encoding="utf-8")
 
 
+def test_update_project_versions_preserves_chart_release_please_annotation(tmp_path: Path) -> None:
+    write_minimal_release_files(tmp_path)
+    (tmp_path / "deploy" / "helm" / "codex-lb" / "Chart.yaml").write_text(
+        "apiVersion: v2\n"
+        "name: codex-lb\n"
+        "version: 1.20.0 # x-release-please-version\n"
+        "appVersion: 1.20.0 # x-release-please-version\n",
+        encoding="utf-8",
+    )
+
+    update_project_versions(tmp_path, "1.20.1")
+
+    assert_project_versions(tmp_path, "1.20.1")
+    chart = (tmp_path / "deploy" / "helm" / "codex-lb" / "Chart.yaml").read_text(encoding="utf-8")
+    assert "version: 1.20.1 # x-release-please-version" in chart
+    assert "appVersion: 1.20.1 # x-release-please-version" in chart
+
+
+def test_assert_project_versions_accepts_chart_release_please_annotation(tmp_path: Path) -> None:
+    write_minimal_release_files(tmp_path, "1.20.1")
+    (tmp_path / "deploy" / "helm" / "codex-lb" / "Chart.yaml").write_text(
+        "apiVersion: v2\n"
+        "name: codex-lb\n"
+        "version: 1.20.1 # x-release-please-version\n"
+        "appVersion: 1.20.1 # x-release-please-version\n",
+        encoding="utf-8",
+    )
+
+    assert_project_versions(tmp_path, "1.20.1")
+
+
 def test_assert_project_versions_accepts_pep440_uv_lock_prerelease(tmp_path: Path) -> None:
     write_minimal_release_files(tmp_path, "1.20.0-beta.3")
     (tmp_path / "uv.lock").write_text(
