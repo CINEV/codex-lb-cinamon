@@ -778,6 +778,16 @@
         "maintenance",
         "infra"
       ]
+    },
+    {
+      "login": "dkfhddla",
+      "name": "jacob",
+      "avatar_url": "https://avatars.githubusercontent.com/u/9860050?v=4",
+      "profile": "https://github.com/dkfhddla",
+      "contributions": [
+        "code",
+        "test"
+      ]
     }
   ],
   "contributorsPerLine": 7,
