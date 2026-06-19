@@ -11,9 +11,11 @@ import pytest
 
 import app.modules.proxy.provider_adapters as provider_adapters_module
 from app.core.clients.openai_platform import OpenAIPlatformError
+from app.core.clients.proxy import UpstreamProxyRouteTrace
 from app.core.crypto import TokenEncryptor
 from app.core.openai.models import CompactResponsePayload
 from app.core.openai.requests import ResponsesCompactRequest, ResponsesRequest
+from app.core.upstream_proxy import ResolvedUpstreamRoute
 from app.core.utils.request_id import reset_request_id, set_request_id
 from app.db.models import Account, AccountStatus
 from app.modules.proxy.provider_adapters import (
@@ -228,6 +230,55 @@ async def test_chatgpt_adapter_stream_response_events_delegates_to_core_client(m
     )
 
     assert [line async for line in stream] == ["data: first", "data: second"]
+
+
+@pytest.mark.asyncio
+async def test_core_stream_responses_forwards_route_kwargs(monkeypatch) -> None:
+    # Regression: the streaming mixin passes route-aware optional kwargs
+    # (route, route_trace, allow_direct_egress) through the facade. The core
+    # adapter must accept and forward them to the underlying proxy client
+    # instead of raising TypeError: unexpected keyword argument 'route'.
+    captured: dict[str, object] = {}
+
+    async def fake_proxy_stream(
+        payload,
+        headers,
+        access_token,
+        account_id,
+        *,
+        raise_for_status,
+        upstream_stream_transport_override,
+        route,
+        route_trace,
+        allow_direct_egress,
+    ) -> AsyncIterator[str]:
+        captured.update(
+            route=route,
+            route_trace=route_trace,
+            allow_direct_egress=allow_direct_egress,
+        )
+        yield "data: ok"
+
+    monkeypatch.setattr(provider_adapters_module, "_proxy_stream_responses", fake_proxy_stream)
+
+    sentinel_route = object()
+    sentinel_trace = object()
+    stream = provider_adapters_module.core_stream_responses(
+        _responses_request(),
+        {"x-test": "1"},
+        "access",
+        "workspace-acc_test",
+        route=cast(ResolvedUpstreamRoute, sentinel_route),
+        route_trace=cast(UpstreamProxyRouteTrace, sentinel_trace),
+        allow_direct_egress=False,
+    )
+
+    assert [line async for line in stream] == ["data: ok"]
+    assert captured == {
+        "route": sentinel_route,
+        "route_trace": sentinel_trace,
+        "allow_direct_egress": False,
+    }
 
 
 @pytest.mark.asyncio

@@ -5,7 +5,7 @@ import logging
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import Protocol, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 from app.core.clients.openai_platform import OpenAIPlatformError, validate_platform_identity
 from app.core.clients.openai_platform import create_compact_response as create_platform_compact_response
@@ -42,6 +42,10 @@ from app.modules.upstream_identities.types import (
 )
 from app.modules.usage.updater import UsageUpdater
 
+if TYPE_CHECKING:
+    from app.core.clients.proxy import UpstreamProxyRouteTrace
+    from app.core.upstream_proxy import ResolvedUpstreamRoute
+
 logger = logging.getLogger(__name__)
 
 type _CompactResponsesCallable = Callable[
@@ -75,6 +79,9 @@ def core_stream_responses(
     *,
     raise_for_status: bool = True,
     upstream_stream_transport_override: str | None = None,
+    route: ResolvedUpstreamRoute | None = None,
+    route_trace: UpstreamProxyRouteTrace | None = None,
+    allow_direct_egress: bool = True,
 ) -> AsyncIterator[str]:
     return _proxy_stream_responses(
         payload,
@@ -83,6 +90,9 @@ def core_stream_responses(
         account_id,
         raise_for_status=raise_for_status,
         upstream_stream_transport_override=upstream_stream_transport_override,
+        route=route,
+        route_trace=route_trace,
+        allow_direct_egress=allow_direct_egress,
     )
 
 
