@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.20.2](https://github.com/CINEV/codex-lb-cinamon/compare/v1.20.1...v1.20.2) (2026-06-19)
+
+
+### Bug Fixes
+
+* **proxy:** forward route kwargs through core_stream_responses adapter ([#39](https://github.com/CINEV/codex-lb-cinamon/issues/39)) ([e454ef5](https://github.com/CINEV/codex-lb-cinamon/commit/e454ef512454980e1c06214df633ceb39f4a236e))
+
 ## [1.20.1](https://github.com/CINEV/codex-lb-cinamon/compare/v1.20.0...v1.20.1) (2026-06-18)
 
 
